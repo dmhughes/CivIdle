@@ -21,7 +21,8 @@ export function initializeGameState(gameState: GameState, options: GameOptions) 
       gameState.tiles.set(xy, {
          tile: xy,
          deposit: {},
-         explored: false,
+         // Mark tiles explored on new game / rebirth to clear fog
+         explored: true,
       });
    });
 

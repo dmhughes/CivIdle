@@ -1,6 +1,5 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { decode, encode } from "@msgpack/msgpack";
-import type { ServerImpl } from "../../../server/src/Server";
 import type { Building } from "../../../shared/definitions/BuildingDefinitions";
 import WorldMap from "../../../shared/definitions/WorldMap.json";
 import { addPetraOfflineTime } from "../../../shared/logic/BuildingLogic";
@@ -55,6 +54,12 @@ import { idbGet, idbSet } from "../utilities/BrowserStorage";
 import { makeObservableHook } from "../utilities/Hook";
 import { playBubble, playKaching } from "../visuals/Sound";
 import { SteamClient, isSteam } from "./SteamClient";
+// import type { ServerImpl } from "../../../server/src/Server";
+
+// Temporary type definition for ServerImpl
+interface ServerImpl {
+  [key: string]: (...args: any[]) => Promise<any>;
+}
 
 let user: IUser | null = null;
 let platformInfo: IPlatformInfo | null = null;

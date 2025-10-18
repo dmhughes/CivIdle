@@ -16,9 +16,10 @@
       "noEmit": true,
       "jsx": "react-jsx",
       "noImplicitOverride": true,
-      "verbatimModuleSyntax": true
+      "verbatimModuleSyntax": true,
+      "types": ["vite/client", "node"]
    },
-   "include": ["src", "shared/logic/LogicResult.ts"],
+   "include": ["src", "shared/logic/LogicResult.ts", "src/**/*.d.ts"],
    "exclude": ["**/node_modules", "**/.*/"],
    "references": [
       {

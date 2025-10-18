@@ -290,7 +290,7 @@ export async function handleChatCommand(command: string): Promise<void> {
          navigator.clipboard.writeText(json);
          addSystemMessage(
             `<code>${result
-               .map((user) => {
+               .map((user: any) => {
                   const gp = user.heartbeatData?.greatPeopleLevel ?? 0;
                   return [
                      user.handle.padEnd(16),
@@ -314,7 +314,7 @@ export async function handleChatCommand(command: string): Promise<void> {
          navigator.clipboard.writeText(json);
          addSystemMessage(
             `<code>${result
-               .map((user) => {
+               .map((user: any) => {
                   const ev = user.heartbeatData?.empireValue ?? 0;
                   return [
                      user.handle.padEnd(16),
@@ -365,7 +365,7 @@ export async function handleChatCommand(command: string): Promise<void> {
          const mutedPlayers = await client.getMutedPlayers();
          addSystemMessage(
             `<code>${mutedPlayers
-               .map((m) => {
+               .map((m: any) => {
                   return `${m.handle} muted until ${new Date(m.time).toLocaleString()}`;
                })
                .join("\n")}</code>`,
@@ -384,7 +384,7 @@ export async function handleChatCommand(command: string): Promise<void> {
          const mutedPlayers = await client.getSlowedPlayer();
          addSystemMessage(
             `<code>${mutedPlayers
-               .map((m) => {
+               .map((m: any) => {
                   const t = new Date(m.time).toLocaleString();
                   const i = Math.ceil(m.interval / SECOND);
                   return `${m.handle} slowed for ${i}s until ${t}`;

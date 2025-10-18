@@ -44,7 +44,7 @@ export function PendingClaimComponent({ gameState }: { gameState: GameState }) {
          const { resources } = await client.claimTradesV2(toClaim);
          RequestPendingClaimUpdate.emit();
          forEach(resources, (res, amount) => {
-            const result = addResourceTo(res, amount, tiles, gameState);
+            const result = addResourceTo(res as Resource, amount, tiles, gameState);
             console.assert(result.amount === amount);
          });
          if (sizeOf(resources) > 0) {
@@ -53,13 +53,13 @@ export function PendingClaimComponent({ gameState }: { gameState: GameState }) {
                t(L.PlayerTradeClaimAllMessageV2, {
                   resources: mapOf(
                      resources,
-                     (res, amount) => `${Config.Resource[res].name()}: ${formatNumber(amount)}`,
+                     (res, amount) => `${Config.Resource[res as Resource].name()}: ${formatNumber(amount as number)}`,
                   ).join(", "),
                }),
             );
             const eic = Tick.current.specialBuildings.get("EastIndiaCompany");
             forEach(resources, (res, amount) => {
-               const tradeValue = amount * (Config.ResourcePrice[res] ?? 0);
+               const tradeValue = amount * (Config.ResourcePrice[res as Resource] ?? 0);
                if (eic) {
                   safeAdd(eic.building.resources, "TradeValue", tradeValue);
                }

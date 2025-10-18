@@ -20,9 +20,9 @@
    },
    "license": "MIT",
    "dependencies": {
+      "@fishpondstudio/steamworks.js": "^0.3.8",
       "fs-extra": "^11.1.0",
-      "mime": "^3.0.0",
-      "@fishpondstudio/steamworks.js": "^0.3.8"
+      "mime": "^3.0.0"
    },
    "devDependencies": {
       "@electron-forge/cli": "^6.0.4",

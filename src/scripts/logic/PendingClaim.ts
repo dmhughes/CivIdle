@@ -7,9 +7,9 @@ export const RequestPendingClaimUpdate = new TypedEvent<void>();
 export const PendingClaimUpdated = new TypedEvent<void>();
 
 RequestPendingClaimUpdate.on(() => {
-   client.getPendingClaims().then((pendingClaims) => {
+   client.getPendingClaims().then((pendingClaims: any) => {
       PendingClaims.length = 0;
-      pendingClaims.forEach((pendingClaim) => {
+      pendingClaims.forEach((pendingClaim: any) => {
          PendingClaims.push(pendingClaim);
       });
       PendingClaimUpdated.emit();

@@ -1,101 +1,101 @@
 import type { Building } from "../../../shared/definitions/BuildingDefinitions";
 import { GreatPersonTickFlag, type GreatPerson } from "../../../shared/definitions/GreatPersonDefinitions";
 import {
-   IOFlags,
-   addWorkers,
-   forEachMultiplier,
-   generateScienceFromFaith,
-   getAvailableWorkers,
-   getBranCastleRequiredWorkers,
-   getBuildingCost,
-   getCathedralOfBrasiliaResources,
-   getGreatWallRange,
-   getMaxWarpStorage,
-   getScienceFromWorkers,
-   getWonderExtraLevel,
-   getWorkingBuilding,
-   getYellowCraneTowerRange,
-   isBuildingWellStocked,
-   isFestival,
-   isSpecialBuilding,
-   isWorldOrNaturalWonder,
-   isWorldWonder,
-   totalMultiplierFor,
-   useWorkers,
+    IOFlags,
+    addWorkers,
+    forEachMultiplier,
+    generateScienceFromFaith,
+    getAvailableWorkers,
+    getBranCastleRequiredWorkers,
+    getBuildingCost,
+    getCathedralOfBrasiliaResources,
+    getGreatWallRange,
+    getMaxWarpStorage,
+    getScienceFromWorkers,
+    getWonderExtraLevel,
+    getWorkingBuilding,
+    getYellowCraneTowerRange,
+    isBuildingWellStocked,
+    isFestival,
+    isSpecialBuilding,
+    isWorldOrNaturalWonder,
+    isWorldWonder,
+    totalMultiplierFor,
+    useWorkers,
 } from "../../../shared/logic/BuildingLogic";
 import { Config } from "../../../shared/logic/Config";
 import {
-   EAST_INDIA_COMPANY_BOOST_PER_EV,
-   EXPLORER_SECONDS,
-   FESTIVAL_CONVERSION_RATE,
-   MAX_EXPLORER,
-   MAX_TELEPORT,
-   SCIENCE_VALUE,
-   TELEPORT_SECONDS,
-   TOWER_BRIDGE_GP_PER_CYCLE,
-   TRADE_TILE_ALLY_BONUS,
-   TRADE_TILE_BONUS,
-   TRADE_TILE_NEIGHBOR_BONUS,
+    EAST_INDIA_COMPANY_BOOST_PER_EV,
+    EXPLORER_SECONDS,
+    FESTIVAL_CONVERSION_RATE,
+    MAX_EXPLORER,
+    MAX_TELEPORT,
+    SCIENCE_VALUE,
+    TELEPORT_SECONDS,
+    TOWER_BRIDGE_GP_PER_CYCLE,
+    TRADE_TILE_ALLY_BONUS,
+    TRADE_TILE_BONUS,
+    TRADE_TILE_NEIGHBOR_BONUS,
 } from "../../../shared/logic/Constants";
 import { GameFeature, hasFeature } from "../../../shared/logic/FeatureLogic";
 import { GameStateFlags } from "../../../shared/logic/GameState";
 import { getGameOptions, getGameState } from "../../../shared/logic/GameStateLogic";
 import {
-   getBuildingIO,
-   getBuildingsByType,
-   getGrid,
-   getTransportStat,
-   getTypeBuildings,
-   getXyBuildings,
+    getBuildingIO,
+    getBuildingsByType,
+    getGrid,
+    getTransportStat,
+    getTypeBuildings,
+    getXyBuildings,
 } from "../../../shared/logic/IntraTickCache";
 import { LogicResult } from "../../../shared/logic/LogicResult";
 import { getVotedBoostId } from "../../../shared/logic/PlayerTradeLogic";
 import {
-   getGreatPeopleChoiceCount,
-   getGreatPeopleForWisdom,
-   getGreatPersonTotalLevel,
-   getPermanentGreatPeopleLevel,
-   getRebirthGreatPeopleCount,
-   rollGreatPeopleThisRun,
+    getGreatPeopleChoiceCount,
+    getGreatPeopleForWisdom,
+    getGreatPersonTotalLevel,
+    getPermanentGreatPeopleLevel,
+    getRebirthGreatPeopleCount,
+    rollGreatPeopleThisRun,
 } from "../../../shared/logic/RebirthLogic";
 import { deductResourceFrom } from "../../../shared/logic/ResourceLogic";
 import {
-   getBuildingUnlockAge,
-   getBuildingsUnlockedBefore,
-   getCurrentAge,
-   getUnlockedTechAges,
+    getBuildingUnlockAge,
+    getBuildingsUnlockedBefore,
+    getCurrentAge,
+    getUnlockedTechAges,
 } from "../../../shared/logic/TechLogic";
 import { NotProducingReason, Tick } from "../../../shared/logic/TickLogic";
 import type {
-   ICentrePompidouBuildingData,
-   IGreatPeopleBuildingData,
-   IIdeologyBuildingData,
-   IItaipuDamBuildingData,
-   ILouvreBuildingData,
-   IReligionBuildingData,
-   ISwissBankBuildingData,
-   ITileData,
-   ITraditionBuildingData,
-   IZugspitzeBuildingData,
+    ICentrePompidouBuildingData,
+    IGreatPeopleBuildingData,
+    IIdeologyBuildingData,
+    IItaipuDamBuildingData,
+    ILouvreBuildingData,
+    IReligionBuildingData,
+    ISwissBankBuildingData,
+    ITileData,
+    ITraditionBuildingData,
+    IZugspitzeBuildingData,
 } from "../../../shared/logic/Tile";
 import { addMultiplier, tickUnlockable } from "../../../shared/logic/Update";
 import { VotedBoostType, type IGetVotedBoostResponse } from "../../../shared/utilities/Database";
 import {
-   MINUTE,
-   clamp,
-   clearFlag,
-   filterOf,
-   firstKeyOf,
-   forEach,
-   keysOf,
-   mapSafeAdd,
-   mapSafePush,
-   pointToTile,
-   round,
-   safeAdd,
-   setFlag,
-   tileToPoint,
-   type Tile,
+    MINUTE,
+    clamp,
+    clearFlag,
+    filterOf,
+    firstKeyOf,
+    forEach,
+    keysOf,
+    mapSafeAdd,
+    mapSafePush,
+    pointToTile,
+    round,
+    safeAdd,
+    setFlag,
+    tileToPoint,
+    type Tile,
 } from "../../../shared/utilities/Helper";
 import { srand } from "../../../shared/utilities/Random";
 import { L, t } from "../../../shared/utilities/i18n";
@@ -1699,16 +1699,17 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
       }
       case "CentrePompidou": {
          const pompidou = building as ICentrePompidouBuildingData;
-         const multiplier = isFestival("CentrePompidou", gs) ? 2 : 1;
-         const cities = pompidou.cities.size + 1;
-         Tick.next.globalMultipliers.output.push({
-            value: multiplier * cities,
-            source: buildingName,
-         });
-         Tick.next.globalMultipliers.storage.push({
-            value: 2 * multiplier * cities,
-            source: buildingName,
-         });
+            const multiplier = isFestival("CentrePompidou", gs) ? 2 : 1;
+            // Fixed Pompidou bonus as requested: 14 (output) and 28 (storage) per effect
+            const fixedBonus = 14;
+            Tick.next.globalMultipliers.output.push({
+               value: multiplier * fixedBonus,
+               source: buildingName,
+            });
+            Tick.next.globalMultipliers.storage.push({
+               value: 2 * multiplier * fixedBonus,
+               source: buildingName,
+            });
          building.resources = {};
          break;
       }

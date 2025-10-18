@@ -1,6 +1,6 @@
 import { forEach, keysOf, pointToTile } from "../utilities/Helper";
 import { getServerNow } from "../utilities/ServerNow";
-import { applyBuildingDefaults, getRandomEmptyTiles } from "./BuildingLogic";
+import { applyBuildingDefaults, findSpecialBuilding, getRandomEmptyTiles } from "./BuildingLogic";
 import { Config } from "./Config";
 import type { GameOptions, GameState } from "./GameState";
 import { getGrid } from "./IntraTickCache";
@@ -119,4 +119,20 @@ export function initializeGameState(gameState: GameState, options: GameOptions) 
          });
       }
    });
+
+   // Ensure Centre Pompidou exists on startup — if not, place it on a random empty tile
+   if (!findSpecialBuilding("CentrePompidou", gameState)) {
+      const tiles = getRandomEmptyTiles(1, gameState);
+      if (tiles.length > 0) {
+         const xy = tiles[0];
+         const tile = gameState.tiles.get(xy);
+         if (tile) {
+            tile.explored = true;
+            tile.building = applyBuildingDefaults(
+               makeBuilding({ type: "CentrePompidou", level: 1, status: "completed" }),
+               opt,
+            );
+         }
+      }
+   }
 }

@@ -10,6 +10,7 @@ import { L, t } from "../../../shared/utilities/i18n";
 import Bat from "../../images/Bat.svg";
 import SpiderWeb from "../../images/SpiderWeb.svg";
 import { compressSave, saveGame, useFloatingMode } from "../Global";
+import { buildMinesInLowerRightQuadrant } from "../logic/davescripts";
 import { client, usePlatformInfo, useUser } from "../rpc/RPCClient";
 import { SteamClient, isSteam } from "../rpc/SteamClient";
 import { getOwnedTradeTile } from "../scenes/PathFinder";
@@ -31,7 +32,7 @@ import { RebirthModal } from "./RebirthModal";
 import { ShortcutPage } from "./ShortcutPage";
 import { ThemePage } from "./ThemePage";
 
-type MenuItemOptions = "view" | "options" | "help" | null;
+type MenuItemOptions = "view" | "options" | "help" | "scripts" | null;
 
 function MenuButton({ name }: { name: string }): React.ReactNode {
    return (
@@ -366,6 +367,40 @@ export function MenuComponent(): React.ReactNode {
                      }}
                   >
                      <MenuItem check={false}>{t(L.About)}</MenuItem>
+                  </div>
+               </div>
+            </div>
+            <div
+               ref={buttonRef}
+               className={classNames({
+                  "menu-button": true,
+                  active: active === "scripts",
+               })}
+               onPointerDown={(e) => {
+                  e.nativeEvent.stopPropagation();
+                  active === "scripts" ? setActive(null) : setActive("scripts");
+               }}
+               onPointerOver={(e) => {
+                  if (active !== null && active !== "scripts") {
+                     setActive("scripts");
+                  }
+               }}
+            >
+               <MenuButton name={"Dave's Scripts"} />
+               <div
+                  className={classNames({
+                     "menu-popover": true,
+                     active: active === "scripts",
+                  })}
+               >
+                  <div
+                     className="menu-popover-item"
+                     onPointerDown={() => {
+                        buildMinesInLowerRightQuadrant();
+                        setActive(null);
+                     }}
+                  >
+                     <MenuItem check={false}>{"001 - Build Initial Mines"}</MenuItem>
                   </div>
                </div>
             </div>

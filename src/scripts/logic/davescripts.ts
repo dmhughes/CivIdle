@@ -65,28 +65,40 @@ export function buildMinesInLowerRightQuadrant(): void {
       if (deposits.Water) waterTiles.push(t);
    }
 
+   // Count existing buildings first
    let placedLogging = 0;
    let placedStone = 0;
    let placedWater = 0;
+   for (const td of gs.tiles.values()) {
+      if (!td.building) continue;
+      if (td.building.type === "LoggingCamp") placedLogging++;
+      else if (td.building.type === "StoneQuarry") placedStone++;
+      else if (td.building.type === "Aqueduct") placedWater++;
+   }
 
    const options = getGameOptions();
 
-   const takeAndPlace = (list: Tile[], type: Building, limit: number, counterRef: (n: number) => void) => {
+   const takeAndPlace = (list: Tile[], type: Building, limit: number, desiredLevel: number, counterRef: (n: number) => void) => {
          for (let i = 0; i < Math.min(limit, list.length); i++) {
             const xy = list[i];
             const b = applyBuildingDefaults(makeBuilding({ type }), options);
+            // Ensure the building starts at level 1 and requests the desiredLevel so normal construction occurs
+            b.level = 1;
+            b.desiredLevel = desiredLevel;
+            b.status = "building";
             const td = gs.tiles.get(xy);
             if (td) {
                td.building = b;
+               td.explored = true;
                counterRef(1);
             }
          }
    };
 
    // Try lower-right first
-   takeAndPlace(loggingTiles, "LoggingCamp", 6, (n) => { placedLogging += n; });
-   takeAndPlace(stoneTiles, "StoneQuarry", 6, (n) => { placedStone += n; });
-   takeAndPlace(waterTiles, "Aqueduct", 6, (n) => { placedWater += n; });
+   takeAndPlace(loggingTiles, "LoggingCamp", 6, 16, (n) => { placedLogging += n; });
+   takeAndPlace(stoneTiles, "StoneQuarry", 6, 16, (n) => { placedStone += n; });
+   takeAndPlace(waterTiles, "Aqueduct", 6, 16, (n) => { placedWater += n; });
 
    // If we didn't place enough of any type, search upper-right quadrant and continue
    if (placedLogging < 6 || placedStone < 6 || placedWater < 6) {
@@ -108,19 +120,21 @@ export function buildMinesInLowerRightQuadrant(): void {
      if (placedLogging < 6) {
        // skip already placed count
        const needed = 6 - placedLogging;
-       takeAndPlace(loggingUpper, "LoggingCamp", needed, (n) => { placedLogging += n; });
+   takeAndPlace(loggingUpper, "LoggingCamp", needed, 16, (n: number) => { placedLogging += n; });
       }
       if (placedStone < 6) {
          const needed = 6 - placedStone;
-       takeAndPlace(stoneUpper, "StoneQuarry", needed, (n) => { placedStone += n; });
+   takeAndPlace(stoneUpper, "StoneQuarry", needed, 16, (n: number) => { placedStone += n; });
       }
       if (placedWater < 6) {
          const needed = 6 - placedWater;
-       takeAndPlace(waterUpper, "Aqueduct", needed, (n) => { placedWater += n; });
+   takeAndPlace(waterUpper, "Aqueduct", needed, 16, (n: number) => { placedWater += n; });
       }
    }
 
    showToast(`Placed ${placedLogging} Logging Camps, ${placedStone} Stone Quarries, ${placedWater} Aqueducts`);
+   // Notify the UI/game state that tiles changed so construction can proceed
+   notifyGameStateUpdate();
 
    // --- Extra setup requested: place a 4x4 block immediately to the right of the Headquarter
    try {
@@ -156,7 +170,12 @@ export function buildMinesInLowerRightQuadrant(): void {
                } else if (!checkBuildingMax("Statistics" as Building, gs)) {
                   showToast("Skipped Statistics Office: maximum already built");
                } else {
-                  leftTd.building = applyBuildingDefaults(makeBuilding({ type: "Statistics" as Building }), options);
+                  const stats = applyBuildingDefaults(makeBuilding({ type: "Statistics" as Building }), options);
+                  // Build normally to level 1: start at level 0 (construction) and request desiredLevel 1
+                  stats.level = 0;
+                  stats.desiredLevel = 1;
+                  stats.status = "building";
+                  leftTd.building = stats;
                   leftTd.explored = true;
                   showToast("Placed Statistics Office to the left of the Headquarter");
                   notifyGameStateUpdate();
@@ -190,15 +209,37 @@ export function buildMinesInLowerRightQuadrant(): void {
                const tile = pointToTile(pt);
                const td = gs.tiles.get(tile);
                if (!td) continue;
-               if (td.building) continue; // skip occupied
                const entry = toPlace[idx];
+               if (td.building) {
+                  // If it's the same type, request an upgrade to level 15 and count it as satisfied
+                  if (td.building.type === entry.type) {
+                     if ((td.building.desiredLevel ?? td.building.level) < 15) {
+                        td.building.desiredLevel = 15;
+                     }
+                     if (entry.type === "WheatFarm") placedWheat++;
+                     else if (entry.type === "House") placedHouse++;
+                     idx++;
+                     continue;
+                  }
+                  continue; // otherwise skip occupied
+               }
             // respect building max limits
             if (!checkBuildingMax(entry.type as Building, gs)) {
                   // skip placing this type if max reached
                   idx++;
                   continue;
                }
-            td.building = applyBuildingDefaults(makeBuilding({ type: entry.type as Building }), options);
+            // create building and set desired level after defaults so it's not immediately completed
+            const created = applyBuildingDefaults(makeBuilding({ type: entry.type as Building }), options);
+            created.level = 1;
+            // Houses and WheatFarms should target level 15 per user
+            if (entry.type === "WheatFarm" || entry.type === "House") {
+               created.desiredLevel = 15;
+            } else {
+               created.desiredLevel = 16;
+            }
+            created.status = "building";
+            td.building = created;
                // ensure explored so it shows up
                td.explored = true;
                if (entry.type === "WheatFarm") placedWheat++;
@@ -220,4 +261,182 @@ export function buildMinesInLowerRightQuadrant(): void {
       console.error("Dave script: failed placing 4x4 beside HQ", e);
       showToast("Dave script: failed to auto-place farms/houses (see console)");
    }
+}
+
+export function buildApartmentsStripAndLeftColumn(): void {
+   const gs = getGameState();
+   if (!gs) {
+      showToast("Game not ready");
+      return;
+   }
+   const options = getGameOptions();
+   const cityCfg = Config.City[gs.city];
+   const size = cityCfg.size;
+
+   // Top-right strip: 10 tiles wide from right edge inward, along the top rows
+      // Top-right area: start 10 tiles left of the top-right corner and fill rows left->right
+      const startX = Math.max(0, size - 1 - 10);
+      const startY = 0;
+
+      // Desired counts for the top area
+      const topPlan: Array<{ type: Building; count: number }> = [
+         { type: "Brickworks" as Building, count: 4 },
+         { type: "LumberMill" as Building, count: 4 },
+         { type: "Bakery" as Building, count: 8 },
+         { type: "PoultryFarm" as Building, count: 15 },
+         { type: "CheeseMaker" as Building, count: 12 },
+         { type: "FlourMill" as Building, count: 2 },
+         { type: "DairyFarm" as Building, count: 2 },
+      ];
+
+      // Place or upgrade buildings to required level (16)
+      const requiredTopLevel = 16;
+      const topSummary: string[] = [];
+
+      // iterate rows starting at (startX,startY), fill left->right until reach map edge, then next row below
+      let planIndex = 0;
+      let placedForCurrent = 0;
+      let x = startX;
+      let y = startY;
+      // Continue until we've attempted all plan items or we've exhausted the map
+      let mapTilesVisited = 0;
+      const maxMapTiles = size * size;
+      while (planIndex < topPlan.length && mapTilesVisited < maxMapTiles) {
+         if (x >= size) {
+            // go to next row starting directly below the initial row
+            y++;
+            x = startX;
+            if (y >= size) break; // out of map
+            continue;
+         }
+         const tile = pointToTile({ x, y });
+         const td = gs.tiles.get(tile);
+         mapTilesVisited++;
+      // if tile is missing or occupied by a non-placeable item, skip
+      if (td?.building) {
+         // If tile is occupied (by a resource mine, wonder, or other building),
+         // do not count it toward the placement quota. If it's the same type
+         // we still upgrade it to the required level, but we don't increment
+         // the placed counter here (existing buildings are counted in the
+         // later global scan).
+         const currentPlan = topPlan[planIndex];
+         if (td.building.type === currentPlan.type) {
+            // Queue an upgrade to the required level instead of forcing it complete.
+            // This lets the normal construction/resource consumption occur.
+            if ((td.building.desiredLevel ?? td.building.level) < requiredTopLevel) {
+               td.building.desiredLevel = requiredTopLevel;
+            }
+            // do not increment placedForCurrent for occupied tiles
+         }
+            // move to next tile
+            x++;
+            // if we've reached desired count for current plan entry, advance
+            if (placedForCurrent >= topPlan[planIndex].count) {
+               topSummary.push(`${placedForCurrent} ${topPlan[planIndex].type}`);
+               planIndex++;
+               placedForCurrent = 0;
+            }
+            continue;
+         }
+         // td exists and is empty, attempt to place
+         if (td && !td.building) {
+            const currentPlan = topPlan[planIndex];
+               try {
+                  if (checkBuildingMax(currentPlan.type, gs)) {
+                  // Place as level 1 with a desiredLevel so the game will perform construction and consume resources
+                  const createdTop = applyBuildingDefaults(makeBuilding({ type: currentPlan.type }), options);
+                  createdTop.level = 1;
+                  createdTop.desiredLevel = requiredTopLevel;
+                  createdTop.status = "building";
+                  td.building = createdTop;
+                  td.explored = true;
+                  placedForCurrent++;
+               } else {
+                  // cannot place more of this type (max reached) - but we can try to count existing ones elsewhere later
+               }
+            } catch (e) {
+               // ignore and continue
+            }
+         }
+         x++;
+         // if we've reached desired count for current plan entry, advance
+         if (placedForCurrent >= topPlan[planIndex].count) {
+            topSummary.push(`${placedForCurrent} ${topPlan[planIndex].type}`);
+            planIndex++;
+            placedForCurrent = 0;
+         }
+      }
+      // if we broke out and still have remaining plan entries, try to find and upgrade existing buildings elsewhere
+      while (planIndex < topPlan.length) {
+         const currentPlan = topPlan[planIndex];
+         let countFound = 0;
+         // scan all tiles for existing buildings of this type and upgrade them
+         for (const [tileKey, tileData] of gs.tiles) {
+            if (countFound >= currentPlan.count) break;
+         if (tileData.building && tileData.building.type === currentPlan.type) {
+            if ((tileData.building.desiredLevel ?? tileData.building.level) < requiredTopLevel) {
+               tileData.building.desiredLevel = requiredTopLevel;
+            }
+            countFound++;
+         }
+         }
+         topSummary.push(`${countFound} ${currentPlan.type} (upgraded existing)`);
+         planIndex++;
+      }
+
+      showToast(`Top area setup: ${topSummary.join(", ")}`);
+
+   // Left-side vertical strip: ensure exactly 800 Apartments total.
+   const desiredTotal = 800;
+   let existingApartments = 0;
+   // First pass: count and upgrade existing Apartments to level 10 (do not count them as placed here)
+   for (const [, tileData] of gs.tiles) {
+      if (tileData.building && tileData.building.type === ("Apartment" as Building)) {
+         existingApartments++;
+         // Request upgrade to level 10, allow normal construction to proceed
+         if ((tileData.building.desiredLevel ?? tileData.building.level) < 10) {
+            tileData.building.desiredLevel = 10;
+         }
+      }
+   }
+
+   let remaining = Math.max(0, desiredTotal - existingApartments);
+   let placedApartments = 0;
+   if (remaining === 0) {
+      showToast(`Already have ${existingApartments} Apartments (upgraded to level 10 where necessary)`);
+   } else {
+      // Fill columns left-to-right, top-to-bottom, only placing on empty tiles
+      const maxCols = Math.min(size, Math.ceil(desiredTotal / Math.max(1, size)));
+      outer: for (let cx = 0; cx < size && remaining > 0; cx++) {
+         for (let y = 0; y < size && remaining > 0; y++) {
+            const pt = { x: cx, y };
+            const tile = pointToTile(pt);
+            const td = gs.tiles.get(tile);
+            if (!td) continue;
+            if (td.building) continue; // only place on empty tiles
+            try {
+               if (!checkBuildingMax("Apartment" as Building, gs)) {
+                  // building max prevents further placement
+                  break outer;
+               }
+            } catch (e) {
+               // ignore and proceed
+            }
+            const createdApartment = applyBuildingDefaults(makeBuilding({ type: "Apartment" as Building }), options);
+            createdApartment.level = 1;
+            createdApartment.desiredLevel = 10;
+            createdApartment.status = "building";
+            td.building = createdApartment;
+            td.explored = true;
+            placedApartments++;
+            remaining--;
+         }
+      }
+      const totalNow = existingApartments + placedApartments;
+      showToast(`Placed ${placedApartments} Apartments; total now ${totalNow}/${desiredTotal}`);
+      if (totalNow < desiredTotal) {
+         showToast(`Could only reach ${totalNow}/${desiredTotal} Apartments (map size or building limits)`);
+      }
+   }
+   notifyGameStateUpdate();
 }

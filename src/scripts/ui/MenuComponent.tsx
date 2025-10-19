@@ -10,7 +10,7 @@ import { L, t } from "../../../shared/utilities/i18n";
 import Bat from "../../images/Bat.svg";
 import SpiderWeb from "../../images/SpiderWeb.svg";
 import { compressSave, saveGame, useFloatingMode } from "../Global";
-import { buildMinesInLowerRightQuadrant } from "../logic/davescripts";
+import { buildApartmentsStripAndLeftColumn, buildMinesInLowerRightQuadrant } from "../logic/davescripts";
 import { client, usePlatformInfo, useUser } from "../rpc/RPCClient";
 import { SteamClient, isSteam } from "../rpc/SteamClient";
 import { getOwnedTradeTile } from "../scenes/PathFinder";
@@ -401,6 +401,15 @@ export function MenuComponent(): React.ReactNode {
                      }}
                   >
                      <MenuItem check={false}>{"001 - Build Initial Mines"}</MenuItem>
+                  </div>
+                  <div
+                     className="menu-popover-item"
+                     onPointerDown={() => {
+                        buildApartmentsStripAndLeftColumn();
+                        setActive(null);
+                     }}
+                  >
+                     <MenuItem check={false}>{"002 - Build Apartments"}</MenuItem>
                   </div>
                </div>
             </div>

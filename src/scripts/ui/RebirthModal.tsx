@@ -6,7 +6,7 @@ import {
    applyBuildingDefaults,
    findSpecialBuilding,
    getBuildingDescription,
-   getMultipliersDescription, getRandomEmptyTiles
+   getMultipliersDescription, isSpecialBuilding
 } from "../../../shared/logic/BuildingLogic";
 import { Config } from "../../../shared/logic/Config";
 import { SUPPORTER_PACK_URL } from "../../../shared/logic/Constants";
@@ -477,36 +477,25 @@ export function RebirthModal(): React.ReactNode {
                      playClick();
                      await resetToCity(nextCity);
 
-                     // Ensure CentrePompidou exists and is aware of all previously-played civs.
-                     // We try to locate an existing Pompidou from the previous run (gs),
-                     // otherwise fall back to any Pompidou in the new game, and finally
-                     // create one if necessary. Then mark all known cities as "played"
-                     // so the Pompidou level matches the number of unique civs.
+                     // Ensure CentrePompidou exists and is aware of previously-played civs.
                      try {
-                        // collect all cities available in Config
-                        const allCities = new Set<City>(Object.keys(Config.City) as City[]);
-
-                        // Try to collect any previously-played cities from the previous game state (gs)
                         const previousPom = findSpecialBuilding("CentrePompidou" as Building, gs);
                         const previousCities = new Set<City>();
                         if (previousPom) {
                            try {
                               const prev = previousPom.building as ICentrePompidouBuildingData;
                               if (prev?.cities) {
-                                 for (const c of Array.from(prev.cities)) {
-                                    previousCities.add(c as City);
-                                 }
+                                 for (const c of Array.from(prev.cities)) previousCities.add(c as City);
                               }
                            } catch (e) {
-                              // ignore
+                              // ignore malformed previous data
                            }
                         }
 
-                        // Now operate on the newly-reset game state (do not transplant objects from old state)
                         const newGs = getGameState();
                         let pom: ICentrePompidouBuildingData | null = null;
 
-                        // If a Pompidou already exists in the new game, use it and merge previous cities
+                        // Use existing in new state if present
                         const existing = findSpecialBuilding("CentrePompidou" as Building, newGs);
                         if (existing) {
                            pom = existing.building as ICentrePompidouBuildingData;
@@ -514,13 +503,10 @@ export function RebirthModal(): React.ReactNode {
                            for (const c of previousCities) pom.cities.add(c);
                         }
 
-                        // If still none, create and place one on a random empty tile
+                        // Otherwise, try to place on any empty tile
                         if (!pom) {
-                           const tiles = getRandomEmptyTiles(1, newGs);
-                           if (tiles.length > 0) {
-                              const xy = tiles[0];
-                              const tile = newGs.tiles.get(xy);
-                              if (tile) {
+                           for (const [xy, td] of newGs.tiles) {
+                              if (!td.building) {
                                  const created = applyBuildingDefaults(
                                     makeBuilding({ type: "CentrePompidou" as Building }),
                                     getGameOptions(),
@@ -529,19 +515,57 @@ export function RebirthModal(): React.ReactNode {
                                  created.level = 1;
                                  created.desiredLevel = 1;
                                  created.status = "completed";
-                                 tile.explored = true;
-                                 tile.building = created;
+                                 td.explored = true;
+                                 td.building = created;
                                  pom = created;
+                                 showToast("Pompidou placed on empty tile");
+                                 break;
                               }
                            }
                         }
 
-                        // If we have a Pompidou instance now, mark all cities as previously played
-                        if (pom) {
-                           for (const c of Object.keys(Config.City) as City[]) {
-                              pom.cities.add(c);
+                        // Replace a non-special building if still none
+                        if (!pom) {
+                           for (const [xy, td] of newGs.tiles) {
+                              if (td.building && !isSpecialBuilding(td.building.type)) {
+                                 const created = applyBuildingDefaults(
+                                    makeBuilding({ type: "CentrePompidou" as Building }),
+                                    getGameOptions(),
+                                 ) as ICentrePompidouBuildingData;
+                                 created.cities = new Set(previousCities);
+                                 created.level = 1;
+                                 created.desiredLevel = 1;
+                                 created.status = "completed";
+                                 td.explored = true;
+                                 td.building = created;
+                                 pom = created;
+                                 showToast("Pompidou placed by replacing non-special building");
+                                 break;
+                              }
                            }
-                           // Ensure the Pompidou's level reflects the number of unique civs
+                        }
+
+                        // Final fallback: force into the first tile available
+                        if (!pom) {
+                           for (const [xy, td] of newGs.tiles) {
+                              const created = applyBuildingDefaults(
+                                 makeBuilding({ type: "CentrePompidou" as Building }),
+                                 getGameOptions(),
+                              ) as ICentrePompidouBuildingData;
+                              created.cities = new Set(previousCities);
+                              created.level = 1;
+                              created.desiredLevel = 1;
+                              created.status = "completed";
+                              td.explored = true;
+                              td.building = created;
+                              pom = created;
+                              showToast("Pompidou forced into tile (final fallback)");
+                              break;
+                           }
+                        }
+
+                        if (pom) {
+                           for (const c of Object.keys(Config.City) as City[]) pom.cities.add(c);
                            pom.level = Math.max(1, pom.cities.size);
                            pom.desiredLevel = pom.level;
                            pom.status = "completed";

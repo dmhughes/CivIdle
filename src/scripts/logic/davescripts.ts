@@ -561,13 +561,130 @@ export function prepareCondoMaterials(): void {
    };
 
    const placedCoal = placeMines(coalTiles, "CoalMine" as Building, 2);
-   const placedIron = placeMines(ironTiles, "IronMine" as Building, 2);
-   const placedCopper = placeMines(copperTiles, "CopperMine" as Building, 2);
+   // building types for iron/copper are named '*MiningCamp' in this codebase
+   const placedIron = placeMines(ironTiles, "IronMiningCamp" as Building, 2);
+   const placedCopper = placeMines(copperTiles, "CopperMiningCamp" as Building, 2);
 
    if (placedCoal || placedIron || placedCopper) {
-      summary.push(`${placedCoal} CoalMine`, `${placedIron} IronMine`, `${placedCopper} CopperMine`);
+      summary.push(`${placedCoal} CoalMine`, `${placedIron} IronMiningCamp`, `${placedCopper} CopperMiningCamp`);
    }
 
    showToast(`Prepared condo materials in top-right strip: ${summary.join(', ')}`);
+   notifyGameStateUpdate();
+}
+
+export function buildApartmentsLeftSide2(): void {
+   const gs = getGameState();
+   if (!gs) {
+      showToast("Game not ready");
+      return;
+   }
+   const options = getGameOptions();
+   const cityCfg = Config.City[gs.city];
+   const size = cityCfg.size;
+
+   const target = 350;
+   let placed = 0;
+
+   outer: for (let x = 0; x < size && placed < target; x++) {
+      for (let y = 0; y < size && placed < target; y++) {
+         const pt = { x, y };
+         const tile = pointToTile(pt);
+         const td = gs.tiles.get(tile);
+         if (!td) continue;
+         // Only place on empty tiles; do not increment counter if tile not empty
+         if (td.building) continue;
+         try {
+            if (!checkBuildingMax("Apartment" as Building, gs)) {
+               // global limit reached; stop trying
+               break outer;
+            }
+         } catch (e) {
+            // ignore and attempt placement
+         }
+         try {
+            const created = applyBuildingDefaults(makeBuilding({ type: "Apartment" as Building }), options);
+            // Start at level 0 and request level 10 so construction occurs normally
+            created.level = 0;
+            created.desiredLevel = 10;
+            created.status = "building";
+            td.building = created;
+            td.explored = true;
+            placed++;
+         } catch (err) {
+            // ignore failures and continue; do not increment placed
+         }
+      }
+   }
+
+   showToast(`Placed ${placed} Apartments (target ${target})`);
+   notifyGameStateUpdate();
+}
+
+export function replaceApartmentsWithCondos(): void {
+   const gs = getGameState();
+   if (!gs) {
+      showToast("Game not ready");
+      return;
+   }
+   const options = getGameOptions();
+   const cityCfg = Config.City[gs.city];
+   const size = cityCfg.size;
+
+   // Step 1: collect all Apartment tiles and remove all but 10 (keep left-most/top-most)
+   const apartments: Array<{ tile: Tile; pt: { x: number; y: number } }> = [];
+   for (const [xy, td] of gs.tiles) {
+      if (td.building && td.building.type === ("Apartment" as Building)) {
+         const p = tileToPoint(xy);
+         apartments.push({ tile: xy, pt: p });
+      }
+   }
+   // sort by x (leftmost first) then y (top to bottom)
+   apartments.sort((a, b) => (a.pt.x - b.pt.x) || (a.pt.y - b.pt.y));
+   const keep = 10;
+   let removed = 0;
+   for (let i = keep; i < apartments.length; i++) {
+      const td = gs.tiles.get(apartments[i].tile);
+      if (!td) continue;
+      // remove the apartment
+      td.building = undefined;
+      removed++;
+   }
+
+   // Step 2: build 750 Condos in vertical columns starting at x=0 (extreme left)
+   const target = 750;
+   let placed = 0;
+
+   outer: for (let x = 0; x < size && placed < target; x++) {
+      for (let y = 0; y < size && placed < target; y++) {
+         const pt = { x, y };
+         const tile = pointToTile(pt);
+         const td = gs.tiles.get(tile);
+         if (!td) continue;
+         if (td.building) continue; // do not increment if occupied
+         try {
+            if (!checkBuildingMax("Condo" as Building, gs)) {
+               // global limit reached for Condos
+               break outer;
+            }
+         } catch (e) {
+            // ignore and attempt placement
+         }
+         try {
+            const created = applyBuildingDefaults(makeBuilding({ type: "Condo" as Building }), options);
+            created.level = 0;
+            created.desiredLevel = 10;
+            created.status = "building";
+            td.building = created;
+            td.explored = true;
+            placed++;
+         } catch (err) {
+            // ignore placement errors; do not increment placed
+         }
+      }
+   }
+
+   showToast(`Removed ${removed} Apartments; placed ${placed} Condos (target ${target})`);
+   if (placed < target) showToast(`Could only place ${placed}/${target} Condos (map full or building limits)`);
    notifyGameStateUpdate();
 }

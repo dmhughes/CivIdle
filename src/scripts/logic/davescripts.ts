@@ -386,8 +386,8 @@ export function buildApartmentsStripAndLeftColumn(): void {
 
       showToast(`Top area setup: ${topSummary.join(", ")}`);
 
-   // Left-side vertical strip: ensure exactly 800 Apartments total.
-   const desiredTotal = 800;
+   // Left-side vertical strip: ensure exactly 400 Apartments total.
+   const desiredTotal = 400;
    let existingApartments = 0;
    // First pass: count and upgrade existing Apartments to level 10 (do not count them as placed here)
    for (const [, tileData] of gs.tiles) {
@@ -438,5 +438,136 @@ export function buildApartmentsStripAndLeftColumn(): void {
          showToast(`Could only reach ${totalNow}/${desiredTotal} Apartments (map size or building limits)`);
       }
    }
+   notifyGameStateUpdate();
+}
+
+export function prepareCondoMaterials(): void {
+   const gs = getGameState();
+   if (!gs) {
+      showToast("Game not ready");
+      return;
+   }
+   const options = getGameOptions();
+   const cityCfg = Config.City[gs.city];
+   const size = cityCfg.size;
+
+   // Top-right strip: same start as other scripts (10 tiles wide)
+   const startX = Math.max(0, size - 1 - 10);
+
+   const plan: Array<{ type: Building; count: number }> = [
+      { type: "Sandpit" as Building, count: 1 },
+      { type: "SteelMill" as Building, count: 4 },
+      { type: "RebarPlant" as Building, count: 5 },
+      { type: "ConcretePlant" as Building, count: 5 },
+      { type: "ReinforcedConcretePlant" as Building, count: 14 },
+      { type: "Pizzeria" as Building, count: 25 },
+      { type: "IronForge" as Building, count: 5 },
+   ];
+
+   const requiredLevel = 16;
+   const placedCounts: Record<string, number> = {};
+   for (const p of plan) placedCounts[p.type] = 0;
+
+   let planIndex = 0;
+   let placedForCurrent = 0;
+
+   // Iterate row-by-row from top (y=0) downward, and within each row from startX -> right edge
+   for (let y = 0; y < size && planIndex < plan.length; y++) {
+      for (let x = startX; x < size && planIndex < plan.length; x++) {
+         const tile = pointToTile({ x, y });
+         const td = gs.tiles.get(tile);
+         if (!td) continue;
+         // Only place on empty tiles; occupied tiles do not count toward the plan
+         if (td.building) continue;
+
+         const current = plan[planIndex];
+         try {
+            if (!checkBuildingMax(current.type, gs)) {
+               // Can't place more of this type due to global limits — skip to next type
+               planIndex++;
+               placedForCurrent = 0;
+               continue;
+            }
+         } catch (e) {
+            // If checkBuildingMax fails for any reason, proceed but try to place
+         }
+
+         try {
+            const created = applyBuildingDefaults(makeBuilding({ type: current.type }), options);
+            created.level = 1;
+            created.desiredLevel = requiredLevel;
+            created.status = "building";
+            td.building = created;
+            td.explored = true;
+            placedForCurrent++;
+            placedCounts[current.type] = (placedCounts[current.type] || 0) + 1;
+         } catch (err) {
+            // ignore placement failure and continue
+         }
+
+         if (placedForCurrent >= current.count) {
+            planIndex++;
+            placedForCurrent = 0;
+         }
+      }
+   }
+
+   const summary: string[] = [];
+   for (const p of plan) {
+      const n = placedCounts[p.type] || 0;
+      summary.push(`${n} ${p.type}`);
+   }
+
+   // --- Search entire map for Coal / Iron / Copper deposit tiles and try to place up to 2 mines each
+   const coalTiles: Tile[] = [];
+   const ironTiles: Tile[] = [];
+   const copperTiles: Tile[] = [];
+
+   for (const t of Array.from(gs.tiles.keys()) as Tile[]) {
+      const td = gs.tiles.get(t);
+      if (!td) continue;
+      if (td.building) continue; // only on empty tiles
+      const d = td.deposit;
+      if (d.Coal) coalTiles.push(t);
+      if (d.Iron) ironTiles.push(t);
+      if (d.Copper) copperTiles.push(t);
+   }
+
+   const placeMines = (list: Tile[], type: Building, limit: number) => {
+      let placed = 0;
+      for (let i = 0; i < list.length && placed < limit; i++) {
+         const tile = list[i];
+         const td = gs.tiles.get(tile);
+         if (!td) continue;
+         if (td.building) continue;
+         try {
+            if (!checkBuildingMax(type, gs)) break;
+         } catch (e) {
+            // ignore and try to place
+         }
+         try {
+            const b = applyBuildingDefaults(makeBuilding({ type }), options);
+            b.level = 1;
+            b.desiredLevel = 16;
+            b.status = "building";
+            td.building = b;
+            td.explored = true;
+            placed++;
+         } catch (err) {
+            // ignore placement errors
+         }
+      }
+      return placed;
+   };
+
+   const placedCoal = placeMines(coalTiles, "CoalMine" as Building, 2);
+   const placedIron = placeMines(ironTiles, "IronMine" as Building, 2);
+   const placedCopper = placeMines(copperTiles, "CopperMine" as Building, 2);
+
+   if (placedCoal || placedIron || placedCopper) {
+      summary.push(`${placedCoal} CoalMine`, `${placedIron} IronMine`, `${placedCopper} CopperMine`);
+   }
+
+   showToast(`Prepared condo materials in top-right strip: ${summary.join(', ')}`);
    notifyGameStateUpdate();
 }

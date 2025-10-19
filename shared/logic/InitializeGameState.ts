@@ -13,6 +13,10 @@ export function initializeGameState(gameState: GameState, options: GameOptions) 
    const center = grid.center();
    const centerXy = pointToTile(center);
 
+   // Create the tile entries but do NOT mark them explored yet.
+   // We postpone marking tiles explored until after unique/natural
+   // buildings (like CentrePompidou) are placed so the random
+   // placement logic can find empty, unexplored tiles.
    grid.forEach((point) => {
       const xy = pointToTile(point);
       if (gameState.tiles.has(xy)) {
@@ -21,21 +25,23 @@ export function initializeGameState(gameState: GameState, options: GameOptions) 
       gameState.tiles.set(xy, {
          tile: xy,
          deposit: {},
-         // Mark tiles explored on new game / rebirth to clear fog
-         explored: true,
+         explored: false,
       });
    });
 
    const opt = Object.assign({}, options, { defaultBuildingLevel: 1 });
 
-   gameState.tiles.get(centerXy)!.building = applyBuildingDefaults(
-      makeBuilding({
-         type: "Headquarter",
-         level: 1,
-         status: "completed",
-      }),
-      opt,
-   );
+   const centerTile = gameState.tiles.get(centerXy);
+   if (centerTile) {
+      centerTile.building = applyBuildingDefaults(
+         makeBuilding({
+            type: "Headquarter",
+            level: 1,
+            status: "completed",
+         }),
+         opt,
+      );
+   }
 
    // forEach(Config.Tech, (k, v) => {
    //    if (v.column === 0) {
@@ -135,4 +141,11 @@ export function initializeGameState(gameState: GameState, options: GameOptions) 
          }
       }
    }
+
+      // Finally, mark all tiles explored to preserve the previous behaviour
+      // of clearing fog on new game / rebirth. This is done after placing
+      // special and natural wonders so the placement helpers can operate.
+      gameState.tiles.forEach((tile) => {
+         tile.explored = true;
+      });
 }

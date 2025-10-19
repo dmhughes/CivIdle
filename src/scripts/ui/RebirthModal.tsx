@@ -1,12 +1,12 @@
 import Tippy from "@tippyjs/react";
 import { useEffect, useState } from "react";
+import type { Building } from "../../../shared/definitions/BuildingDefinitions";
 import type { City } from "../../../shared/definitions/CityDefinitions";
 import {
+   applyBuildingDefaults,
    findSpecialBuilding,
    getBuildingDescription,
-   getMultipliersDescription,
-   getPompidou,
-   getRandomEmptyTiles,
+   getMultipliersDescription, getRandomEmptyTiles
 } from "../../../shared/logic/BuildingLogic";
 import { Config } from "../../../shared/logic/Config";
 import { SUPPORTER_PACK_URL } from "../../../shared/logic/Constants";
@@ -22,6 +22,7 @@ import {
 } from "../../../shared/logic/RebirthLogic";
 import { getAgeForTech, getCurrentAge } from "../../../shared/logic/TechLogic";
 import { Tick } from "../../../shared/logic/TickLogic";
+import { makeBuilding, type ICentrePompidouBuildingData } from "../../../shared/logic/Tile";
 import { UserAttributes } from "../../../shared/utilities/Database";
 import {
    clamp,
@@ -383,7 +384,7 @@ export function RebirthModal(): React.ReactNode {
                   <div className="row p5">
                      <div className="cc mr10" style={{ width: 50, height: 50 }}>
                         <BuildingSpriteComponent
-                           building={`Headquarter_${nextCity}` as any}
+                           building={`Headquarter_${nextCity}` as unknown as Building}
                            scale={0.5}
                            style={{ filter: "invert(0.75)" }}
                         />
@@ -476,16 +477,77 @@ export function RebirthModal(): React.ReactNode {
                      playClick();
                      await resetToCity(nextCity);
 
-                     const pompidou = getPompidou(gs);
-                     if (currentCity !== nextCity && pompidou) {
-                        getRandomEmptyTiles(1, getGameState()).forEach((xy) => {
-                           const tile = getGameState().tiles.get(xy);
-                           if (tile) {
-                              tile.explored = true;
-                              tile.building = pompidou;
-                              pompidou.cities.add(currentCity);
+                     // Ensure CentrePompidou exists and is aware of all previously-played civs.
+                     // We try to locate an existing Pompidou from the previous run (gs),
+                     // otherwise fall back to any Pompidou in the new game, and finally
+                     // create one if necessary. Then mark all known cities as "played"
+                     // so the Pompidou level matches the number of unique civs.
+                     try {
+                        // collect all cities available in Config
+                        const allCities = new Set<City>(Object.keys(Config.City) as City[]);
+
+                        // Try to collect any previously-played cities from the previous game state (gs)
+                        const previousPom = findSpecialBuilding("CentrePompidou" as Building, gs);
+                        const previousCities = new Set<City>();
+                        if (previousPom) {
+                           try {
+                              const prev = previousPom.building as ICentrePompidouBuildingData;
+                              if (prev?.cities) {
+                                 for (const c of Array.from(prev.cities)) {
+                                    previousCities.add(c as City);
+                                 }
+                              }
+                           } catch (e) {
+                              // ignore
                            }
-                        });
+                        }
+
+                        // Now operate on the newly-reset game state (do not transplant objects from old state)
+                        const newGs = getGameState();
+                        let pom: ICentrePompidouBuildingData | null = null;
+
+                        // If a Pompidou already exists in the new game, use it and merge previous cities
+                        const existing = findSpecialBuilding("CentrePompidou" as Building, newGs);
+                        if (existing) {
+                           pom = existing.building as ICentrePompidouBuildingData;
+                           if (!pom.cities) pom.cities = new Set();
+                           for (const c of previousCities) pom.cities.add(c);
+                        }
+
+                        // If still none, create and place one on a random empty tile
+                        if (!pom) {
+                           const tiles = getRandomEmptyTiles(1, newGs);
+                           if (tiles.length > 0) {
+                              const xy = tiles[0];
+                              const tile = newGs.tiles.get(xy);
+                              if (tile) {
+                                 const created = applyBuildingDefaults(
+                                    makeBuilding({ type: "CentrePompidou" as Building }),
+                                    getGameOptions(),
+                                 ) as ICentrePompidouBuildingData;
+                                 created.cities = new Set(previousCities);
+                                 created.level = 1;
+                                 created.desiredLevel = 1;
+                                 created.status = "completed";
+                                 tile.explored = true;
+                                 tile.building = created;
+                                 pom = created;
+                              }
+                           }
+                        }
+
+                        // If we have a Pompidou instance now, mark all cities as previously played
+                        if (pom) {
+                           for (const c of Object.keys(Config.City) as City[]) {
+                              pom.cities.add(c);
+                           }
+                           // Ensure the Pompidou's level reflects the number of unique civs
+                           pom.level = Math.max(1, pom.cities.size);
+                           pom.desiredLevel = pom.level;
+                           pom.status = "completed";
+                        }
+                     } catch (err) {
+                        console.warn("Rebirth: failed ensuring Pompidou state", err);
                      }
 
                      try {

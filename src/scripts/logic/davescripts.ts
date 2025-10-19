@@ -1,14 +1,25 @@
 import type { Building } from "../../../shared/definitions/BuildingDefinitions";
-import { applyBuildingDefaults, checkBuildingMax, findSpecialBuilding } from "../../../shared/logic/BuildingLogic";
+import {
+   applyBuildingDefaults,
+   checkBuildingMax,
+   findSpecialBuilding,
+} from "../../../shared/logic/BuildingLogic";
 import { Config } from "../../../shared/logic/Config";
 import type { GameState } from "../../../shared/logic/GameState";
 import { getGameOptions, getGameState, notifyGameStateUpdate } from "../../../shared/logic/GameStateLogic";
 import { makeBuilding } from "../../../shared/logic/Tile";
 import { pointToTile, tileToPoint, type Tile } from "../../../shared/utilities/Helper";
+import { WorldScene } from "../scenes/WorldScene";
 import { showToast } from "../ui/GlobalModal";
+import { Singleton } from "../utilities/Singleton";
 
 // Find the nearest empty tile (no building) to a centre point within maxRadius.
-function findNearestEmptyTile(center: { x: number; y: number }, maxRadius: number, size: number, gs: GameState): Tile | null {
+function findNearestEmptyTile(
+   center: { x: number; y: number },
+   maxRadius: number,
+   size: number,
+   gs: GameState,
+): Tile | null {
    for (let r = 0; r <= maxRadius; r++) {
       for (let dx = -r; dx <= r; dx++) {
          const dy = r - Math.abs(dx);
@@ -78,27 +89,39 @@ export function buildMinesInLowerRightQuadrant(): void {
 
    const options = getGameOptions();
 
-   const takeAndPlace = (list: Tile[], type: Building, limit: number, desiredLevel: number, counterRef: (n: number) => void) => {
-         for (let i = 0; i < Math.min(limit, list.length); i++) {
-            const xy = list[i];
-            const b = applyBuildingDefaults(makeBuilding({ type }), options);
-            // Ensure the building starts at level 1 and requests the desiredLevel so normal construction occurs
-            b.level = 1;
-            b.desiredLevel = desiredLevel;
-            b.status = "building";
-            const td = gs.tiles.get(xy);
-            if (td) {
-               td.building = b;
-               td.explored = true;
-               counterRef(1);
-            }
+   const takeAndPlace = (
+      list: Tile[],
+      type: Building,
+      limit: number,
+      desiredLevel: number,
+      counterRef: (n: number) => void,
+   ) => {
+      for (let i = 0; i < Math.min(limit, list.length); i++) {
+         const xy = list[i];
+         const b = applyBuildingDefaults(makeBuilding({ type }), options);
+         // Ensure the building starts at level 1 and requests the desiredLevel so normal construction occurs
+         b.level = 1;
+         b.desiredLevel = desiredLevel;
+         b.status = "building";
+         const td = gs.tiles.get(xy);
+         if (td) {
+            td.building = b;
+            td.explored = true;
+            counterRef(1);
          }
+      }
    };
 
    // Try lower-right first
-   takeAndPlace(loggingTiles, "LoggingCamp", 6, 16, (n) => { placedLogging += n; });
-   takeAndPlace(stoneTiles, "StoneQuarry", 6, 16, (n) => { placedStone += n; });
-   takeAndPlace(waterTiles, "Aqueduct", 6, 16, (n) => { placedWater += n; });
+   takeAndPlace(loggingTiles, "LoggingCamp", 6, 16, (n) => {
+      placedLogging += n;
+   });
+   takeAndPlace(stoneTiles, "StoneQuarry", 6, 16, (n) => {
+      placedStone += n;
+   });
+   takeAndPlace(waterTiles, "Aqueduct", 6, 16, (n) => {
+      placedWater += n;
+   });
 
    // If we didn't place enough of any type, search upper-right quadrant and continue
    if (placedLogging < 6 || placedStone < 6 || placedWater < 6) {
@@ -117,24 +140,41 @@ export function buildMinesInLowerRightQuadrant(): void {
          if (deposits.Water) waterUpper.push(t);
       }
 
-     if (placedLogging < 6) {
-       // skip already placed count
-       const needed = 6 - placedLogging;
-   takeAndPlace(loggingUpper, "LoggingCamp", needed, 16, (n: number) => { placedLogging += n; });
+      if (placedLogging < 6) {
+         // skip already placed count
+         const needed = 6 - placedLogging;
+         takeAndPlace(loggingUpper, "LoggingCamp", needed, 16, (n: number) => {
+            placedLogging += n;
+         });
       }
       if (placedStone < 6) {
          const needed = 6 - placedStone;
-   takeAndPlace(stoneUpper, "StoneQuarry", needed, 16, (n: number) => { placedStone += n; });
+         takeAndPlace(stoneUpper, "StoneQuarry", needed, 16, (n: number) => {
+            placedStone += n;
+         });
       }
       if (placedWater < 6) {
          const needed = 6 - placedWater;
-   takeAndPlace(waterUpper, "Aqueduct", needed, 16, (n: number) => { placedWater += n; });
+         takeAndPlace(waterUpper, "Aqueduct", needed, 16, (n: number) => {
+            placedWater += n;
+         });
       }
    }
 
-   showToast(`Placed ${placedLogging} Logging Camps, ${placedStone} Stone Quarries, ${placedWater} Aqueducts`);
+   showToast(
+      `Placed ${placedLogging} Logging Camps, ${placedStone} Stone Quarries, ${placedWater} Aqueducts`,
+   );
    // Notify the UI/game state that tiles changed so construction can proceed
    notifyGameStateUpdate();
+
+   // Force an immediate refresh of the world scene visuals so new/removed buildings
+   // appear without requiring an application restart.
+   try {
+      const scene = Singleton().sceneManager.getCurrent(WorldScene);
+      if (scene) scene.onGameStateChanged(getGameState());
+   } catch (err) {
+      // ignore any errors (e.g., if singletons not initialized)
+   }
 
    // --- Extra setup requested: place a 4x4 block immediately to the right of the Headquarter
    try {
@@ -144,16 +184,16 @@ export function buildMinesInLowerRightQuadrant(): void {
          showToast(`Headquarter located at ${hqPoint.x},${hqPoint.y}`);
          console.log("Dave script: Headquarter at", hqPoint);
 
-            // If Statistics (Statistics Office) already exists anywhere, report and skip trying to place another
-            try {
-               const existingStats = findSpecialBuilding("Statistics", gs);
-               if (existingStats) {
-                  const ep = tileToPoint(existingStats.tile);
-                  showToast(`Statistics Office already present at ${ep.x},${ep.y}`);
-               }
-            } catch (err) {
-               // ignore
+         // If Statistics (Statistics Office) already exists anywhere, report and skip trying to place another
+         try {
+            const existingStats = findSpecialBuilding("Statistics", gs);
+            if (existingStats) {
+               const ep = tileToPoint(existingStats.tile);
+               showToast(`Statistics Office already present at ${ep.x},${ep.y}`);
             }
+         } catch (err) {
+            // ignore
+         }
 
          // --- Place Statistics Office immediately to the left of the HQ if possible
          try {
@@ -170,7 +210,10 @@ export function buildMinesInLowerRightQuadrant(): void {
                } else if (!checkBuildingMax("Statistics" as Building, gs)) {
                   showToast("Skipped Statistics Office: maximum already built");
                } else {
-                  const stats = applyBuildingDefaults(makeBuilding({ type: "Statistics" as Building }), options);
+                  const stats = applyBuildingDefaults(
+                     makeBuilding({ type: "Statistics" as Building }),
+                     options,
+                  );
                   // Build normally to level 1: start at level 0 (construction) and request desiredLevel 1
                   stats.level = 0;
                   stats.desiredLevel = 1;
@@ -195,7 +238,7 @@ export function buildMinesInLowerRightQuadrant(): void {
          let placedWheat = 0;
          let placedHouse = 0;
 
-         const toPlace: Array<{ type: string } > = [];
+         const toPlace: Array<{ type: string }> = [];
          // first 4 wheat farms, then 12 houses
          for (let i = 0; i < 4; i++) toPlace.push({ type: "WheatFarm" });
          for (let i = 0; i < 12; i++) toPlace.push({ type: "House" });
@@ -223,23 +266,23 @@ export function buildMinesInLowerRightQuadrant(): void {
                   }
                   continue; // otherwise skip occupied
                }
-            // respect building max limits
-            if (!checkBuildingMax(entry.type as Building, gs)) {
+               // respect building max limits
+               if (!checkBuildingMax(entry.type as Building, gs)) {
                   // skip placing this type if max reached
                   idx++;
                   continue;
                }
-            // create building and set desired level after defaults so it's not immediately completed
-            const created = applyBuildingDefaults(makeBuilding({ type: entry.type as Building }), options);
-            created.level = 1;
-            // Houses and WheatFarms should target level 15 per user
-            if (entry.type === "WheatFarm" || entry.type === "House") {
-               created.desiredLevel = 15;
-            } else {
-               created.desiredLevel = 16;
-            }
-            created.status = "building";
-            td.building = created;
+               // create building and set desired level after defaults so it's not immediately completed
+               const created = applyBuildingDefaults(makeBuilding({ type: entry.type as Building }), options);
+               created.level = 1;
+               // Houses and WheatFarms should target level 15 per user
+               if (entry.type === "WheatFarm" || entry.type === "House") {
+                  created.desiredLevel = 15;
+               } else {
+                  created.desiredLevel = 16;
+               }
+               created.status = "building";
+               td.building = created;
                // ensure explored so it shows up
                td.explored = true;
                if (entry.type === "WheatFarm") placedWheat++;
@@ -274,44 +317,44 @@ export function buildApartmentsStripAndLeftColumn(): void {
    const size = cityCfg.size;
 
    // Top-right strip: 10 tiles wide from right edge inward, along the top rows
-      // Top-right area: start 10 tiles left of the top-right corner and fill rows left->right
-      const startX = Math.max(0, size - 1 - 10);
-      const startY = 0;
+   // Top-right area: start 10 tiles left of the top-right corner and fill rows left->right
+   const startX = Math.max(0, size - 1 - 10);
+   const startY = 0;
 
-      // Desired counts for the top area
-      const topPlan: Array<{ type: Building; count: number }> = [
-         { type: "Brickworks" as Building, count: 4 },
-         { type: "LumberMill" as Building, count: 4 },
-         { type: "Bakery" as Building, count: 8 },
-         { type: "PoultryFarm" as Building, count: 15 },
-         { type: "CheeseMaker" as Building, count: 12 },
-         { type: "FlourMill" as Building, count: 2 },
-         { type: "DairyFarm" as Building, count: 2 },
-      ];
+   // Desired counts for the top area
+   const topPlan: Array<{ type: Building; count: number }> = [
+      { type: "Brickworks" as Building, count: 4 },
+      { type: "LumberMill" as Building, count: 4 },
+      { type: "Bakery" as Building, count: 8 },
+      { type: "PoultryFarm" as Building, count: 15 },
+      { type: "CheeseMaker" as Building, count: 12 },
+      { type: "FlourMill" as Building, count: 2 },
+      { type: "DairyFarm" as Building, count: 2 },
+   ];
 
-      // Place or upgrade buildings to required level (16)
-      const requiredTopLevel = 16;
-      const topSummary: string[] = [];
+   // Place or upgrade buildings to required level (16)
+   const requiredTopLevel = 16;
+   const topSummary: string[] = [];
 
-      // iterate rows starting at (startX,startY), fill left->right until reach map edge, then next row below
-      let planIndex = 0;
-      let placedForCurrent = 0;
-      let x = startX;
-      let y = startY;
-      // Continue until we've attempted all plan items or we've exhausted the map
-      let mapTilesVisited = 0;
-      const maxMapTiles = size * size;
-      while (planIndex < topPlan.length && mapTilesVisited < maxMapTiles) {
-         if (x >= size) {
-            // go to next row starting directly below the initial row
-            y++;
-            x = startX;
-            if (y >= size) break; // out of map
-            continue;
-         }
-         const tile = pointToTile({ x, y });
-         const td = gs.tiles.get(tile);
-         mapTilesVisited++;
+   // iterate rows starting at (startX,startY), fill left->right until reach map edge, then next row below
+   let planIndex = 0;
+   let placedForCurrent = 0;
+   let x = startX;
+   let y = startY;
+   // Continue until we've attempted all plan items or we've exhausted the map
+   let mapTilesVisited = 0;
+   const maxMapTiles = size * size;
+   while (planIndex < topPlan.length && mapTilesVisited < maxMapTiles) {
+      if (x >= size) {
+         // go to next row starting directly below the initial row
+         y++;
+         x = startX;
+         if (y >= size) break; // out of map
+         continue;
+      }
+      const tile = pointToTile({ x, y });
+      const td = gs.tiles.get(tile);
+      mapTilesVisited++;
       // if tile is missing or occupied by a non-placeable item, skip
       if (td?.building) {
          // If tile is occupied (by a resource mine, wonder, or other building),
@@ -328,36 +371,7 @@ export function buildApartmentsStripAndLeftColumn(): void {
             }
             // do not increment placedForCurrent for occupied tiles
          }
-            // move to next tile
-            x++;
-            // if we've reached desired count for current plan entry, advance
-            if (placedForCurrent >= topPlan[planIndex].count) {
-               topSummary.push(`${placedForCurrent} ${topPlan[planIndex].type}`);
-               planIndex++;
-               placedForCurrent = 0;
-            }
-            continue;
-         }
-         // td exists and is empty, attempt to place
-         if (td && !td.building) {
-            const currentPlan = topPlan[planIndex];
-               try {
-                  if (checkBuildingMax(currentPlan.type, gs)) {
-                  // Place as level 1 with a desiredLevel so the game will perform construction and consume resources
-                  const createdTop = applyBuildingDefaults(makeBuilding({ type: currentPlan.type }), options);
-                  createdTop.level = 1;
-                  createdTop.desiredLevel = requiredTopLevel;
-                  createdTop.status = "building";
-                  td.building = createdTop;
-                  td.explored = true;
-                  placedForCurrent++;
-               } else {
-                  // cannot place more of this type (max reached) - but we can try to count existing ones elsewhere later
-               }
-            } catch (e) {
-               // ignore and continue
-            }
-         }
+         // move to next tile
          x++;
          // if we've reached desired count for current plan entry, advance
          if (placedForCurrent >= topPlan[planIndex].count) {
@@ -365,26 +379,55 @@ export function buildApartmentsStripAndLeftColumn(): void {
             planIndex++;
             placedForCurrent = 0;
          }
+         continue;
       }
-      // if we broke out and still have remaining plan entries, try to find and upgrade existing buildings elsewhere
-      while (planIndex < topPlan.length) {
+      // td exists and is empty, attempt to place
+      if (td && !td.building) {
          const currentPlan = topPlan[planIndex];
-         let countFound = 0;
-         // scan all tiles for existing buildings of this type and upgrade them
-         for (const [tileKey, tileData] of gs.tiles) {
-            if (countFound >= currentPlan.count) break;
+         try {
+            if (checkBuildingMax(currentPlan.type, gs)) {
+               // Place as level 1 with a desiredLevel so the game will perform construction and consume resources
+               const createdTop = applyBuildingDefaults(makeBuilding({ type: currentPlan.type }), options);
+               createdTop.level = 1;
+               createdTop.desiredLevel = requiredTopLevel;
+               createdTop.status = "building";
+               td.building = createdTop;
+               td.explored = true;
+               placedForCurrent++;
+            } else {
+               // cannot place more of this type (max reached) - but we can try to count existing ones elsewhere later
+            }
+         } catch (e) {
+            // ignore and continue
+         }
+      }
+      x++;
+      // if we've reached desired count for current plan entry, advance
+      if (placedForCurrent >= topPlan[planIndex].count) {
+         topSummary.push(`${placedForCurrent} ${topPlan[planIndex].type}`);
+         planIndex++;
+         placedForCurrent = 0;
+      }
+   }
+   // if we broke out and still have remaining plan entries, try to find and upgrade existing buildings elsewhere
+   while (planIndex < topPlan.length) {
+      const currentPlan = topPlan[planIndex];
+      let countFound = 0;
+      // scan all tiles for existing buildings of this type and upgrade them
+      for (const [tileKey, tileData] of gs.tiles) {
+         if (countFound >= currentPlan.count) break;
          if (tileData.building && tileData.building.type === currentPlan.type) {
             if ((tileData.building.desiredLevel ?? tileData.building.level) < requiredTopLevel) {
                tileData.building.desiredLevel = requiredTopLevel;
             }
             countFound++;
          }
-         }
-         topSummary.push(`${countFound} ${currentPlan.type} (upgraded existing)`);
-         planIndex++;
       }
+      topSummary.push(`${countFound} ${currentPlan.type} (upgraded existing)`);
+      planIndex++;
+   }
 
-      showToast(`Top area setup: ${topSummary.join(", ")}`);
+   showToast(`Top area setup: ${topSummary.join(", ")}`);
 
    // Left-side vertical strip: ensure exactly 400 Apartments total.
    const desiredTotal = 400;
@@ -422,7 +465,10 @@ export function buildApartmentsStripAndLeftColumn(): void {
             } catch (e) {
                // ignore and proceed
             }
-            const createdApartment = applyBuildingDefaults(makeBuilding({ type: "Apartment" as Building }), options);
+            const createdApartment = applyBuildingDefaults(
+               makeBuilding({ type: "Apartment" as Building }),
+               options,
+            );
             createdApartment.level = 1;
             createdApartment.desiredLevel = 10;
             createdApartment.status = "building";
@@ -451,29 +497,38 @@ export function prepareCondoMaterials(): void {
    const cityCfg = Config.City[gs.city];
    const size = cityCfg.size;
 
-   // Top-right strip: same start as other scripts (10 tiles wide)
-   const startX = Math.max(0, size - 1 - 10);
+   // Rightmost 10-column strip (columns [size-10 .. size-1])
+   const stripStartX = Math.max(0, size - 10);
 
+   // Building plan: non-pizzeria items first, Pizzeria handled specially later
    const plan: Array<{ type: Building; count: number }> = [
       { type: "Sandpit" as Building, count: 1 },
       { type: "SteelMill" as Building, count: 4 },
       { type: "RebarPlant" as Building, count: 5 },
       { type: "ConcretePlant" as Building, count: 5 },
       { type: "ReinforcedConcretePlant" as Building, count: 14 },
-      { type: "Pizzeria" as Building, count: 25 },
+      // Pizzerias intentionally omitted here; we'll place them after a gap
       { type: "IronForge" as Building, count: 5 },
    ];
 
    const requiredLevel = 16;
    const placedCounts: Record<string, number> = {};
    for (const p of plan) placedCounts[p.type] = 0;
+   placedCounts.Pizzeria = 0;
+
+   // Rules: skip the first 6 rows (they already have buildings), then fill
+   // non-pizzeria plan into the strip row-by-row, left->right, wrapping down.
+   // After those are placed, leave a 3-row gap, then place 50 Pizzerias.
+   const skipTopRows = 6;
+   const pizzeriaGapRows = 3;
+   const pizzeriaCount = 50;
 
    let planIndex = 0;
    let placedForCurrent = 0;
 
-   // Iterate row-by-row from top (y=0) downward, and within each row from startX -> right edge
-   for (let y = 0; y < size && planIndex < plan.length; y++) {
-      for (let x = startX; x < size && planIndex < plan.length; x++) {
+   // Start placing at row = skipTopRows
+   for (let y = skipTopRows; y < size && planIndex < plan.length; y++) {
+      for (let x = stripStartX; x < size && planIndex < plan.length; x++) {
          const tile = pointToTile({ x, y });
          const td = gs.tiles.get(tile);
          if (!td) continue;
@@ -511,6 +566,135 @@ export function prepareCondoMaterials(): void {
          }
       }
    }
+
+   // After placing non-pizzeria items, leave a 3-row gap and then place Pizzerias
+   let pPlaced = 0;
+   let pStartY = skipTopRows;
+   // advance pStartY to the row after the last attempted placement for non-pizzas
+   // Find the first row below skipTopRows that contains any building placedCounts from plan
+   // We'll simply set pStartY = skipTopRows + number of rows scanned for plan, but since we
+   // scanned until completion (or map end), we'll conservatively set pStartY = skipTopRows + pizzeriaGapRows + Math.floor(0);
+   // Simpler approach: search from skipTopRows downward for the first empty row after we've attempted placements
+   // We'll pick the first row >= skipTopRows where at least one tile in the strip is empty and use that as the start
+   let foundRowAfterPlan: number | null = null;
+   for (let y = skipTopRows; y < size; y++) {
+      // consider this row as candidate start if at least one tile in strip is empty
+      let hasEmpty = false;
+      for (let x = stripStartX; x < size; x++) {
+         const td = gs.tiles.get(pointToTile({ x, y }));
+         if (td && !td.building) {
+            hasEmpty = true;
+            break;
+         }
+      }
+      if (hasEmpty) {
+         foundRowAfterPlan = y;
+         break;
+      }
+   }
+   if (foundRowAfterPlan !== null) {
+      pStartY = foundRowAfterPlan + pizzeriaGapRows;
+   } else {
+      pStartY = skipTopRows + pizzeriaGapRows;
+   }
+
+   // Place pizzerias starting at pStartY left->right across the strip
+   outerPizza: for (let y = pStartY; y < size && pPlaced < pizzeriaCount; y++) {
+      for (let x = stripStartX; x < size && pPlaced < pizzeriaCount; x++) {
+         const td = gs.tiles.get(pointToTile({ x, y }));
+         if (!td) continue;
+         if (td.building) continue;
+         try {
+            if (!checkBuildingMax("Pizzeria" as Building, gs)) break outerPizza;
+         } catch (e) {
+            // ignore
+         }
+         try {
+            const created = applyBuildingDefaults(makeBuilding({ type: "Pizzeria" as Building }), options);
+            created.level = 1;
+            created.desiredLevel = requiredLevel;
+            created.status = "building";
+            td.building = created;
+            td.explored = true;
+            pPlaced++;
+            placedCounts.Pizzeria = (placedCounts.Pizzeria || 0) + 1;
+         } catch (err) {
+            // ignore
+         }
+      }
+   }
+
+      // Immediately after pizzas, place supporting factories: 5 CheeseMakers, 5 PoultryFarms, 5 FlourMills
+      const postPlan: Array<{ type: Building; count: number }> = [
+         { type: "CheeseMaker" as Building, count: 5 },
+         { type: "PoultryFarm" as Building, count: 5 },
+         { type: "FlourMill" as Building, count: 5 },
+      ];
+
+      // Start searching directly below the last pizza row (approx pStartY + rows used), but if pizzas exhausted map, just scan from pStartY downward
+      const postPlacedCounts: Record<string, number> = {};
+      for (const p of postPlan) postPlacedCounts[p.type] = 0;
+
+      let postYStart = pStartY;
+      // If we placed pizzas, try to place these starting on the row after the last pizza row used
+      if (pPlaced > 0) {
+         // find last row where a Pizzeria was placed
+         let lastPizzaRow: number | null = null;
+         for (let y = pStartY; y < size; y++) {
+            let found = false;
+            for (let x = stripStartX; x < size; x++) {
+               const t = gs.tiles.get(pointToTile({ x, y }));
+               if (t?.building && t.building.type === "Pizzeria") {
+                  lastPizzaRow = y;
+                  found = true;
+                  break;
+               }
+            }
+            if (found) continue;
+            // if we passed rows with pizzas and hit a row without, stop searching further
+            if (lastPizzaRow !== null) break;
+         }
+         if (lastPizzaRow !== null) postYStart = lastPizzaRow + 1;
+      }
+
+      // Place each postPlan entry sequentially into the strip left->right, wrapping rows
+      for (const entry of postPlan) {
+         let remaining = entry.count;
+         for (let y = postYStart; y < size && remaining > 0; y++) {
+            for (let x = stripStartX; x < size && remaining > 0; x++) {
+               const td = gs.tiles.get(pointToTile({ x, y }));
+               if (!td) continue;
+               if (td.building) continue;
+               try {
+                  if (!checkBuildingMax(entry.type, gs)) {
+                     remaining = 0;
+                     break;
+                  }
+               } catch (e) {
+                  // ignore
+               }
+               try {
+                  const created = applyBuildingDefaults(makeBuilding({ type: entry.type }), options);
+                  created.level = 1;
+                  created.desiredLevel = requiredLevel;
+                  created.status = "building";
+                  td.building = created;
+                  td.explored = true;
+                  remaining--;
+                  postPlacedCounts[entry.type] = (postPlacedCounts[entry.type] || 0) + 1;
+               } catch (err) {
+                  // ignore
+               }
+            }
+         }
+         // advance start row for next type so they don't all try to place on same rows
+         postYStart += 0; // keep continuous placement; adjust if you want separation
+      }
+
+      // Merge postPlacedCounts into placedCounts for reporting
+      for (const k of Object.keys(postPlacedCounts)) {
+         placedCounts[k] = (placedCounts[k] || 0) + (postPlacedCounts[k] || 0);
+      }
 
    const summary: string[] = [];
    for (const p of plan) {
@@ -566,10 +750,14 @@ export function prepareCondoMaterials(): void {
    const placedCopper = placeMines(copperTiles, "CopperMiningCamp" as Building, 2);
 
    if (placedCoal || placedIron || placedCopper) {
-      summary.push(`${placedCoal} CoalMine`, `${placedIron} IronMiningCamp`, `${placedCopper} CopperMiningCamp`);
+      summary.push(
+         `${placedCoal} CoalMine`,
+         `${placedIron} IronMiningCamp`,
+         `${placedCopper} CopperMiningCamp`,
+      );
    }
 
-   showToast(`Prepared condo materials in top-right strip: ${summary.join(', ')}`);
+   showToast(`Prepared condo materials in top-right strip: ${summary.join(", ")}`);
    notifyGameStateUpdate();
 }
 
@@ -640,7 +828,7 @@ export function replaceApartmentsWithCondos(): void {
       }
    }
    // sort by x (leftmost first) then y (top to bottom)
-   apartments.sort((a, b) => (a.pt.x - b.pt.x) || (a.pt.y - b.pt.y));
+   apartments.sort((a, b) => a.pt.x - b.pt.x || a.pt.y - b.pt.y);
    const keep = 10;
    let removed = 0;
    for (let i = keep; i < apartments.length; i++) {
@@ -685,6 +873,247 @@ export function replaceApartmentsWithCondos(): void {
    }
 
    showToast(`Removed ${removed} Apartments; placed ${placed} Condos (target ${target})`);
-   if (placed < target) showToast(`Could only place ${placed}/${target} Condos (map full or building limits)`);
+   if (placed < target)
+      showToast(`Could only place ${placed}/${target} Condos (map full or building limits)`);
+   notifyGameStateUpdate();
+}
+
+export function prepareCNTowerMaterial(): void {
+   // New implementation (user request):
+   // - Operate on the rightmost 10-column vertical strip (columns size-10 .. size-1)
+   // - Identify islands in that strip: contiguous rows where at least one tile in the
+   //   strip has a building. Islands are separated by fully-empty strip-rows.
+   // - Completely delete all buildings (within the strip bounds) in the first TWO islands
+   //   encountered scanning from the top down. Stop after clearing the second island.
+   const gs = getGameState();
+   if (!gs) {
+      showToast("Game not ready");
+      return;
+   }
+   const options = getGameOptions(); // not used here but kept for parity
+   const cityCfg = Config.City[gs.city];
+   const size = cityCfg.size;
+
+   const stripXStart = Math.max(0, size - 10);
+   const stripXEnd = size - 1;
+
+   const clearedCounts: Record<string, number> = {};
+   let totalCleared = 0;
+
+   const rowHasBuildingInStrip = (row: number): boolean => {
+      for (let x = stripXStart; x <= stripXEnd; x++) {
+         const td = gs.tiles.get(pointToTile({ x, y: row }));
+         if (td?.building) return true;
+      }
+      return false;
+   };
+
+   // Pre-scan the strip to identify island ranges (start..end rows)
+   const islands: Array<{ start: number; end: number }> = [];
+   {
+      let inIsland = false;
+      let islandStart = 0;
+      for (let ry = 0; ry < size; ry++) {
+         if (rowHasBuildingInStrip(ry)) {
+            if (!inIsland) {
+               inIsland = true;
+               islandStart = ry;
+            }
+         } else {
+            if (inIsland) {
+               islands.push({ start: islandStart, end: ry - 1 });
+               inIsland = false;
+            }
+         }
+      }
+      if (inIsland) islands.push({ start: islandStart, end: size - 1 });
+   }
+
+   if (islands.length === 0) {
+      showToast("prepareCNTowerMaterial: no islands found in rightmost strip to clear");
+   } else {
+      const ranges = islands.map((i) => `${i.start}-${i.end}`).join(", ");
+      showToast(`prepareCNTowerMaterial: found ${islands.length} island(s) in strip: ${ranges}`);
+   }
+
+   // Now clear buildings in the first two islands (within strip bounds)
+   const toClear = Math.min(2, islands.length);
+   let islandsCleared = 0;
+   for (let i = 0; i < toClear; i++) {
+      const isl = islands[i];
+      for (let ry = isl.start; ry <= isl.end; ry++) {
+         for (let rx = stripXStart; rx <= stripXEnd; rx++) {
+            const t = pointToTile({ x: rx, y: ry });
+            const td = gs.tiles.get(t);
+            if (!td) continue;
+            if (td.building) {
+               const bt = td.building.type;
+               // debug log before clearing
+               console.log(`prepareCNTowerMaterial: clearing ${bt} at ${rx},${ry}`);
+               td.building = undefined;
+               clearedCounts[bt] = (clearedCounts[bt] || 0) + 1;
+               totalCleared++;
+            }
+         }
+      }
+      islandsCleared++;
+   }
+
+   const summary: string[] = [];
+   if (totalCleared === 0) {
+      showToast("prepareCNTowerMaterial: no buildings found in rightmost strip to clear");
+   } else {
+      for (const k of Object.keys(clearedCounts)) {
+         summary.push(`${clearedCounts[k]} ${k}`);
+      }
+      showToast(`Cleared ${totalCleared} buildings from first ${Math.min(2, islandsCleared)} islands: ${summary.join(", ")}`);
+   }
+
+   // Now place the requested buildings in exact order, scanning from top of the rightmost
+   // 10-column strip downward. Place on empty tiles only; if a tile is occupied, skip it.
+   // Buildings start at level 0 and should target level 15.
+   const buildPlan: Array<{ type: Building; count: number }> = [
+      { type: "Brickworks" as Building, count: 4 },
+      { type: "LumberMill" as Building, count: 4 },
+      { type: "Glassworks" as Building, count: 1 },
+      { type: "GarmentWorkshop" as Building, count: 1 },
+      { type: "LensWorkshop" as Building, count: 1 },
+      { type: "PrintingHouse" as Building, count: 4 },
+      { type: "ActorsGuild" as Building, count: 2 },
+      { type: "PublishingHouse" as Building, count: 1 },
+      { type: "Stadium" as Building, count: 2 },
+      { type: "MagazinePublisher" as Building, count: 4 },
+      { type: "Embassy" as Building, count: 4 },
+      { type: "MusiciansGuild" as Building, count: 2 },
+      { type: "PoetrySchool" as Building, count: 2 },
+      { type: "Brewery" as Building, count: 1 },
+      { type: "PaperMaker" as Building, count: 1 },
+      { type: "Sandpit" as Building, count: 1 },
+      { type: "University" as Building, count: 4 },
+      { type: "CottonMill" as Building, count: 1 },
+      { type: "PaintersGuild" as Building, count: 1 },
+      { type: "Museum" as Building, count: 3 },
+      { type: "Courthouse" as Building, count: 3 },
+      { type: "Mosque" as Building, count: 1 },
+      { type: "Parliament" as Building, count: 3 },
+      { type: "CottonPlantation" as Building, count: 1 },
+      { type: "CheeseMaker" as Building, count: 1 }
+   ];
+
+   const placedPlanCounts: Record<string, number> = {};
+   for (const b of buildPlan) placedPlanCounts[b.type] = 0;
+
+   const targetLevel = 15;
+   let lastPlacedRow: number | null = null;
+
+   // For each plan entry, scan rows top->bottom and columns left->right within the strip,
+   // placing until we've satisfied the requested count or exhausted the map.
+   for (const entry of buildPlan) {
+      let remaining = entry.count;
+      // iterate rows top->bottom
+      for (let yy = 0; yy < size && remaining > 0; yy++) {
+         for (let xx = stripXStart; xx <= stripXEnd && remaining > 0; xx++) {
+            const td = gs.tiles.get(pointToTile({ x: xx, y: yy }));
+            if (!td) continue;
+            if (td.building) continue; // skip occupied
+            try {
+               if (!checkBuildingMax(entry.type, gs)) {
+                  // cannot place any more of this type globally
+                  remaining = 0;
+                  break;
+               }
+            } catch (e) {
+               // if check fails for some reason, continue trying placements
+            }
+            try {
+               const created = applyBuildingDefaults(makeBuilding({ type: entry.type }), options);
+               created.level = 0;
+               created.desiredLevel = targetLevel;
+               created.status = "building";
+               td.building = created;
+               td.explored = true;
+               remaining--;
+               placedPlanCounts[entry.type] = (placedPlanCounts[entry.type] || 0) + 1;
+               lastPlacedRow = yy;
+            } catch (err) {
+               // ignore and continue
+            }
+         }
+      }
+   }
+
+   const placedSummary: string[] = [];
+   for (const e of buildPlan) {
+      const n = placedPlanCounts[e.type] || 0;
+      placedSummary.push(`${n} ${e.type}`);
+   }
+   showToast(`Started construction in right strip: ${placedSummary.join(", ")}`);
+   // Leave one empty row after the last placed row, then begin electrified placements
+   const electrifiedPlan: Array<{ type: Building; count: number }> = [
+      { type: "CoalPowerPlant" as Building, count: 1 },
+      { type: "MovieStudio" as Building, count: 5 },
+      { type: "RadioStation" as Building, count: 8 },
+   ];
+
+   let electStartY = 0;
+   if (lastPlacedRow !== null) electStartY = Math.min(size - 1, lastPlacedRow + 2);
+
+   const electPlacedCounts: Record<string, number> = {};
+   for (const e of electrifiedPlan) electPlacedCounts[e.type] = 0;
+
+   for (const entry of electrifiedPlan) {
+      let remaining = entry.count;
+      let yy = electStartY;
+      while (yy < size && remaining > 0) {
+         for (let xx = stripXStart; xx <= stripXEnd && remaining > 0; xx++) {
+            const td = gs.tiles.get(pointToTile({ x: xx, y: yy }));
+            if (!td) continue;
+            if (td.building) continue;
+            try {
+               if (!checkBuildingMax(entry.type, gs)) {
+                  remaining = 0;
+                  break;
+               }
+            } catch (e) {
+               // ignore
+            }
+            try {
+               const created = applyBuildingDefaults(makeBuilding({ type: entry.type }), options);
+               created.level = 1;
+               created.desiredLevel = 16;
+               created.status = "building";
+               td.building = created;
+               td.explored = true;
+               remaining--;
+               electPlacedCounts[entry.type] = (electPlacedCounts[entry.type] || 0) + 1;
+            } catch (err) {
+               // ignore
+            }
+         }
+         if (remaining > 0) yy++;
+      }
+      // after finishing this entry, continue placing next entries starting at the same row where we left off
+      // find the next available row (the lowest row that still may have space)
+      // compute electStartY as the smallest y that still has an empty tile in the strip starting from current electStartY
+      let foundRow = null;
+      for (let ry = electStartY; ry < size; ry++) {
+         for (let rx = stripXStart; rx <= stripXEnd; rx++) {
+            const ttd = gs.tiles.get(pointToTile({ x: rx, y: ry }));
+            if (ttd && !ttd.building) {
+               foundRow = ry;
+               break;
+            }
+         }
+         if (foundRow !== null) break;
+      }
+      if (foundRow !== null) electStartY = foundRow;
+      else break; // no more space
+   }
+
+   const electSummary: string[] = [];
+   for (const e of electrifiedPlan) {
+      electSummary.push(`${electPlacedCounts[e.type] || 0} ${e.type}`);
+   }
+   showToast(`Electrified placement started: ${electSummary.join(", ")}`);
    notifyGameStateUpdate();
 }

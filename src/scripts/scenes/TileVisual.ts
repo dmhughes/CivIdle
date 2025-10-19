@@ -4,26 +4,26 @@ import { BitmapText, Container, Rectangle, Sprite, Texture } from "pixi.js";
 import type { Resource } from "../../../shared/definitions/ResourceDefinitions";
 import { getBuildingLevelLabel, getBuildingPercentage } from "../../../shared/logic/BuildingLogic";
 import {
-   DarkTileTextures,
-   getTextColor,
-   type GameOptions,
-   type GameState,
+    DarkTileTextures,
+    getTextColor,
+    type GameOptions,
+    type GameState,
 } from "../../../shared/logic/GameState";
 import { getGameOptions, getGameState } from "../../../shared/logic/GameStateLogic";
 import { getGrid } from "../../../shared/logic/IntraTickCache";
 import { Tick } from "../../../shared/logic/TickLogic";
 import type { ITileData } from "../../../shared/logic/Tile";
 import {
-   clamp,
-   forEach,
-   formatHMS,
-   formatNumber,
-   formatPercent,
-   layoutCenter,
-   pointToTile,
-   pointToXy,
-   sizeOf,
-   type Tile,
+    clamp,
+    forEach,
+    formatHMS,
+    formatNumber,
+    formatPercent,
+    layoutCenter,
+    pointToTile,
+    pointToXy,
+    sizeOf,
+    type Tile,
 } from "../../../shared/utilities/Helper";
 import { v2 } from "../../../shared/utilities/Vector2";
 import { getBuildingTexture, getNotProducingTexture, getTexture, getTileTexture } from "../logic/VisualLogic";
@@ -36,6 +36,7 @@ import type { WorldScene } from "./WorldScene";
 
 export class TileVisual extends Container {
    private readonly _world: WorldScene;
+   private _lastBuildingType?: string;
    private _fog: Sprite;
    private _spinner: Sprite;
    private _building: Sprite;
@@ -61,8 +62,11 @@ export class TileVisual extends Container {
       this._xy = pointToTile(this._grid);
 
       const gs = getGameState();
-      this._tile = gs.tiles.get(this._xy)!;
-      console.assert(this._tile, `Expect tile ${this._xy} to exist!`);
+      const tileData = gs.tiles.get(this._xy);
+      if (!tileData) {
+         throw new Error(`Tile data not found for ${this._xy}`);
+      }
+      this._tile = tileData;
       const g = getGrid(gs);
       this.position = g.gridToPosition(this._grid);
 
@@ -337,12 +341,15 @@ export class TileVisual extends Container {
 
       if (!this._tile.building) {
          this._building.visible = false;
+         this._lastBuildingType = undefined;
          this._spinner.visible = false;
          return;
       }
       this._building.visible = true;
-      if (this._building.texture.noFrame) {
+      // If the building type changed (or we've never set it), update the texture.
+      if (this._lastBuildingType !== this._tile.building.type) {
          this._building.texture = getBuildingTexture(this._tile.building.type, textures, gameState.city);
+         this._lastBuildingType = this._tile.building.type;
       }
 
       switch (this._tile.building.status) {

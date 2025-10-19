@@ -10,7 +10,7 @@ import { L, t } from "../../../shared/utilities/i18n";
 import Bat from "../../images/Bat.svg";
 import SpiderWeb from "../../images/SpiderWeb.svg";
 import { compressSave, saveGame, useFloatingMode } from "../Global";
-import { buildApartmentsLeftSide2, buildApartmentsStripAndLeftColumn, buildMinesInLowerRightQuadrant, prepareCondoMaterials, replaceApartmentsWithCondos } from "../logic/davescripts";
+import { buildApartmentsLeftSide2, buildApartmentsStripAndLeftColumn, buildMinesInLowerRightQuadrant, prepareCNTowerMaterial, prepareCondoMaterials, replaceApartmentsWithCondos } from "../logic/davescripts";
 import { client, usePlatformInfo, useUser } from "../rpc/RPCClient";
 import { SteamClient, isSteam } from "../rpc/SteamClient";
 import { getOwnedTradeTile } from "../scenes/PathFinder";
@@ -437,6 +437,15 @@ export function MenuComponent(): React.ReactNode {
                      }}
                   >
                      <MenuItem check={false}>{"005 - Replace Apartments with Condos"}</MenuItem>
+                  </div>
+                  <div
+                     className="menu-popover-item"
+                     onPointerDown={() => {
+                        prepareCNTowerMaterial();
+                        setActive(null);
+                     }}
+                  >
+                     <MenuItem check={false}>{"006 - Prepare CN Tower Material"}</MenuItem>
                   </div>
                </div>
             </div>

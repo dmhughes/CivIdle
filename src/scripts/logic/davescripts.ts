@@ -629,6 +629,7 @@ export function prepareCondoMaterials(): void {
          { type: "CheeseMaker" as Building, count: 5 },
          { type: "PoultryFarm" as Building, count: 5 },
          { type: "FlourMill" as Building, count: 5 },
+         { type: "DairyFarm" as Building, count: 5 },
       ];
 
       // Start searching directly below the last pizza row (approx pStartY + rows used), but if pizzas exhausted map, just scan from pStartY downward
@@ -1116,4 +1117,396 @@ export function prepareCNTowerMaterial(): void {
    }
    showToast(`Electrified placement started: ${electSummary.join(", ")}`);
    notifyGameStateUpdate();
+}
+
+   export function prepareAtomiumAndOxfordUniversity(): void {
+      // Clearing-only variant: find the first fully-empty strip row, then delete
+      // buildings row-by-row until a second fully-empty strip row is reached.
+      // This lets the user place the wonders manually after the area is cleared.
+      const gs = getGameState();
+      if (!gs) {
+         showToast("Game not ready");
+         return;
+      }
+      const cityCfg = Config.City[gs.city];
+      const size = cityCfg.size;
+
+      const stripXStart = Math.max(0, size - 10);
+      const stripXEnd = size - 1;
+
+      const clearedCounts: Record<string, number> = {};
+      let totalCleared = 0;
+      // Delete everything in the rightmost strip scanning top-down and stop
+      // when two fully-empty strip rows have been seen. An "empty strip row" is a
+      // row where every tile in the 10-column strip has no building.
+      let emptyRowsSeen = 0;
+      let rowsScanned = 0;
+      for (let ry = 0; ry < size; ry++) {
+         // Determine whether this strip row is completely empty
+         let rowHasBuilding = false;
+         for (let rx = stripXStart; rx <= stripXEnd; rx++) {
+            const td = gs.tiles.get(pointToTile({ x: rx, y: ry }));
+            if (td?.building) {
+               rowHasBuilding = true;
+               break;
+            }
+         }
+
+         // If the row is empty, increment the counter and stop if we've seen two
+         if (!rowHasBuilding) {
+            emptyRowsSeen++;
+            if (emptyRowsSeen >= 2) {
+               break; // stop processing further rows
+            }
+            // continue scanning — nothing to delete on this empty row
+            continue;
+         }
+
+         // Row has at least one building: delete every building in the strip for this row
+         rowsScanned++;
+         for (let rx = stripXStart; rx <= stripXEnd; rx++) {
+            const t = pointToTile({ x: rx, y: ry });
+            const td = gs.tiles.get(t);
+            if (!td) continue;
+            if (td.building) {
+               const bt = td.building.type;
+               console.log(`prepareAtomiumAndOxfordUniversity: clearing ${bt} at ${rx},${ry}`);
+               td.building = undefined;
+               clearedCounts[bt] = (clearedCounts[bt] || 0) + 1;
+               totalCleared++;
+            }
+         }
+      }
+
+         // After clearing each row, notify the game state and force a visual refresh
+         // so any leftover sprites/graphics are removed immediately.
+         if (totalCleared > 0) {
+            try {
+               notifyGameStateUpdate();
+               const scene = Singleton().sceneManager.getCurrent(WorldScene);
+               if (scene) scene.onGameStateChanged(getGameState());
+            } catch (err) {
+               // ignore any errors while attempting to refresh visuals
+               console.warn('prepareAtomiumAndOxfordUniversity: visual refresh failed', err);
+            }
+         }
+
+      const summary: string[] = [];
+      if (totalCleared === 0) {
+         showToast("prepareAtomiumAndOxfordUniversity: no buildings were cleared in the strip before the second empty row");
+      } else {
+         for (const k of Object.keys(clearedCounts)) summary.push(`${clearedCounts[k]} ${k}`);
+         showToast(`Cleared ${totalCleared} buildings across ${rowsScanned} non-empty rows (stopped after seeing 2 empty rows): ${summary.join(", ")}`);
+      }
+
+      // --- Now place the requested buildings at the TOP of the strip, left->right
+      // The user requested: IronForge x3, Sandpit x1, SteelMill x3, RebarPlant x3
+   // Compact placement plan: array of { type, count } for readability
+   const placementPlan: Array<{ type: Building | string; count: number }> = [
+      { type: "Brickworks", count: 4 },
+      { type: "LumberMill", count: 4 },
+      { type: "IronForge", count: 3 },
+      { type: "Sandpit", count: 1 },
+      { type: "SteelMill", count: 3 },
+      { type: "RebarPlant", count: 3 },
+      { type: "ConcretePlant", count: 3 },
+      { type: "ReinforcedConcretePlant", count: 6 },
+      { type: "GunpowderMill", count: 2 },
+      { type: "PoetrySchool", count: 3 },
+      { type: "PaperMaker", count: 1 },
+      { type: "Brewery", count: 1 },
+      { type: "Stable", count: 1 },
+      { type: "DynamiteWorkshop", count: 3 },
+      { type: "RifleFactory", count: 3 },
+      { type: "Shrine", count: 2 },
+      { type: "GatlingGunFactory", count: 3 },
+      { type: "University", count: 3 },
+      { type: "ArtilleryFactory", count: 3 },
+   ];
+
+   // Expand plan into a flat sequence of types to place left->right
+   const placementSequence: string[] = [];
+   for (const entry of placementPlan) {
+      for (let i = 0; i < entry.count; i++) placementSequence.push(entry.type as string);
+   }
+
+      const placedTopCounts: Record<string, number> = {};
+      let placementIndex = 0;
+      // Track the last row where we successfully placed a top item so we can
+      // leave an empty row after it for post-top placements.
+      let lastPlacedRow: number | null = null;
+      const topRow = 0; // start at the very top of the strip and fill downward if necessary
+
+      // Scan rows top->bottom and columns left->right within the strip, placing sequentially
+      for (let yy = topRow; yy < size && placementIndex < placementSequence.length; yy++) {
+         for (let xx = stripXStart; xx <= stripXEnd && placementIndex < placementSequence.length; xx++) {
+            const td = gs.tiles.get(pointToTile({ x: xx, y: yy }));
+            if (!td) continue;
+            // skip occupied tiles
+            if (td.building) continue;
+
+            const desiredType = placementSequence[placementIndex] as Building;
+            try {
+               if (!checkBuildingMax(desiredType as Building, gs)) {
+                  // cannot place more of this type globally; skip this placement and move on
+                  console.warn(`prepareAtomiumAndOxfordUniversity: cannot place ${desiredType} due to building limits`);
+                  placementIndex++;
+                  continue;
+               }
+            } catch (e) {
+               // if check fails, proceed to attempt placement
+            }
+
+            try {
+               const created = applyBuildingDefaults(makeBuilding({ type: desiredType as Building }), getGameOptions());
+               // Per user request: start at level 0 and target level 15
+               created.level = 0;
+               created.desiredLevel = 15;
+               created.status = "building";
+               td.building = created;
+               td.explored = true;
+               placedTopCounts[desiredType] = (placedTopCounts[desiredType] || 0) + 1;
+               // record row used
+               lastPlacedRow = yy;
+               console.log(`prepareAtomiumAndOxfordUniversity: placed ${desiredType} at ${xx},${yy}`);
+               placementIndex++;
+            } catch (err) {
+               console.error("prepareAtomiumAndOxfordUniversity: failed to place", desiredType, err);
+               // continue trying next slots
+               placementIndex++;
+            }
+         }
+      }
+
+      const placedSummary: string[] = [];
+      for (const t of placementSequence) {
+         const n = placedTopCounts[t] || 0;
+         if (n > 0 && placedSummary.indexOf(`${n} ${t}`) === -1) placedSummary.push(`${n} ${t}`);
+      }
+      if (placementIndex < placementSequence.length) {
+         showToast(`Placed on top row: ${placedSummary.join(", ")} (some placements may have been skipped due to occupied tiles or limits)`);
+      } else {
+         showToast(`Placed on top row: ${placedSummary.join(", ")}`);
+      }
+
+      // notify and force a scene refresh so changes are visible immediately
+      notifyGameStateUpdate();
+      try {
+         const scene = Singleton().sceneManager.getCurrent(WorldScene);
+         if (scene) scene.onGameStateChanged(getGameState());
+      } catch (err) {
+         // ignore
+      }
+      
+      // --- Additional requested placement: leave one empty row, then place
+      // 1 CoalPowerPlant, 20 UraniumEnrichmentPlant, 6 AtomicFacility at level 0->15
+      // We'll start placing these beginning at row = topRow + 2 (one empty row after topRow)
+      const postTopPlan: Array<{ type: Building; count: number }> = [
+         { type: "CoalPowerPlant" as Building, count: 1 },
+         { type: "UraniumEnrichmentPlant" as Building, count: 20 },
+         { type: "AtomicFacility" as Building, count: 6 },
+      ];
+
+   // Determine a safe start row for post-top placements.
+   // Requirement: leave one fully-empty strip row after the last placed top items
+   // (e.g. after ArtilleryFactory) before starting CoalPowerPlant etc.
+   let postTopStartRow = 0;
+   if (lastPlacedRow !== null) {
+      // Search for the first fully-empty strip row at or after lastPlacedRow+1
+      let foundEmptyRow: number | null = null;
+      for (let ry = lastPlacedRow + 1; ry < size; ry++) {
+         let rowEmpty = true;
+         for (let rx = stripXStart; rx <= stripXEnd; rx++) {
+            const ttd = gs.tiles.get(pointToTile({ x: rx, y: ry }));
+            if (ttd?.building) {
+               rowEmpty = false;
+               break;
+            }
+         }
+         if (rowEmpty) {
+            foundEmptyRow = ry;
+            break;
+         }
+      }
+      if (foundEmptyRow !== null) {
+         // start one row after the empty row found to guarantee a single empty row
+         postTopStartRow = Math.min(size - 1, foundEmptyRow + 1);
+      } else {
+         // fallback: leave one row after lastPlacedRow
+         postTopStartRow = Math.min(size - 1, lastPlacedRow + 2);
+      }
+   } else {
+      // No top placements happened; keep previous conservative default
+      postTopStartRow = Math.min(size - 1, topRow + 2);
+   }
+      const postTopPlaced: Record<string, number> = {};
+      for (const e of postTopPlan) postTopPlaced[e.type] = 0;
+
+      for (const entry of postTopPlan) {
+         let remaining = entry.count;
+         for (let yy = postTopStartRow; yy < size && remaining > 0; yy++) {
+            for (let xx = stripXStart; xx <= stripXEnd && remaining > 0; xx++) {
+               const td = gs.tiles.get(pointToTile({ x: xx, y: yy }));
+               if (!td) continue;
+               if (td.building) continue;
+               try {
+                  if (!checkBuildingMax(entry.type, gs)) {
+                     remaining = 0;
+                     break;
+                  }
+               } catch (e) {
+                  // ignore check errors and try to place
+               }
+               try {
+                  const created = applyBuildingDefaults(makeBuilding({ type: entry.type }), getGameOptions());
+                  created.level = 0;
+                  created.desiredLevel = 15;
+                  created.status = "building";
+                  td.building = created;
+                  td.explored = true;
+                  remaining--;
+                  postTopPlaced[entry.type] = (postTopPlaced[entry.type] || 0) + 1;
+               } catch (err) {
+                  // ignore and continue
+                  remaining--;
+               }
+            }
+         }
+         // advance the start row for the next type so they continue filling downward
+         // start next type at the same row where we left off; compute next available row
+         let foundRow: number | null = null;
+         for (let ry = postTopStartRow; ry < size; ry++) {
+            for (let rx = stripXStart; rx <= stripXEnd; rx++) {
+               const ttd = gs.tiles.get(pointToTile({ x: rx, y: ry }));
+               if (ttd && !ttd.building) {
+                  foundRow = ry;
+                  break;
+               }
+            }
+            if (foundRow !== null) break;
+         }
+         if (foundRow !== null) postTopStartRow = foundRow;
+         else break; // no more space in strip
+      }
+
+      const postTopSummary: string[] = [];
+      for (const k of Object.keys(postTopPlaced)) {
+         if (postTopPlaced[k] > 0) postTopSummary.push(`${postTopPlaced[k]} ${k}`);
+      }
+      if (postTopSummary.length) showToast(`Post-top placements started: ${postTopSummary.join(', ')}`);
+      
+      // --- Now search the entire map for up to 2 Uranium deposit tiles and build mines at level 0->15
+      const uraniumTiles: Tile[] = [];
+      for (const t of Array.from(gs.tiles.keys()) as Tile[]) {
+         const td = gs.tiles.get(t);
+         if (!td) continue;
+         if (td.building) continue; // only place on empty tiles
+         if (td.deposit?.Uranium) uraniumTiles.push(t);
+      }
+
+      let placedUraniumMines = 0;
+      const maxUraniumMines = 2;
+      for (let i = 0; i < uraniumTiles.length && placedUraniumMines < maxUraniumMines; i++) {
+         const tile = uraniumTiles[i];
+         const td = gs.tiles.get(tile);
+         if (!td) continue;
+         try {
+            if (!checkBuildingMax("UraniumMine" as Building, gs)) break;
+         } catch (e) {
+            // ignore and try
+         }
+         try {
+            const created = applyBuildingDefaults(makeBuilding({ type: "UraniumMine" as Building }), getGameOptions());
+            created.level = 0;
+            created.desiredLevel = 15;
+            created.status = "building";
+            td.building = created;
+            td.explored = true;
+            placedUraniumMines++;
+         } catch (err) {
+            // ignore
+         }
+      }
+      if (placedUraniumMines > 0) showToast(`Placed ${placedUraniumMines} UraniumMine(s) on deposit tiles`);
+      else showToast("No available Uranium deposit tiles found for UraniumMine placement");
+
+   }
+
+export function prepareCloneLabs(): void {
+   // Clear the rightmost 10-column strip scanning top-down until two fully-empty
+   // strip rows are seen. Delete any building encountered. Stop when the second
+   // empty strip row is reached after performing deletions.
+   const gs = getGameState();
+   if (!gs) {
+      showToast("Game not ready");
+      return;
+   }
+   const cityCfg = Config.City[gs.city];
+   const size = cityCfg.size;
+
+   const stripXStart = Math.max(0, size - 10);
+   const stripXEnd = size - 1;
+
+   const clearedCounts: Record<string, number> = {};
+   let totalCleared = 0;
+   let firstBlankSeen = false;
+
+   for (let ry = 0; ry < size; ry++) {
+      // check whether this strip row is completely empty
+      let rowHasBuilding = false;
+      for (let rx = stripXStart; rx <= stripXEnd; rx++) {
+         const td = gs.tiles.get(pointToTile({ x: rx, y: ry }));
+         if (td?.building) {
+            rowHasBuilding = true;
+            break;
+         }
+      }
+
+      if (!rowHasBuilding) {
+         // empty row
+         if (!firstBlankSeen) {
+            firstBlankSeen = true;
+            console.log(`prepareCloneLabs: first blank strip row at ${ry}`);
+            // continue scanning for second blank row
+            continue;
+         }
+         // second empty row encountered
+         if (totalCleared > 0) {
+            console.log(`prepareCloneLabs: second blank strip row at ${ry}, stopping (cleared ${totalCleared})`);
+            break;
+         }
+         // haven't deleted anything yet - keep scanning
+         continue;
+      }
+
+      // Row has at least one building: delete every building in the strip for this row
+      for (let rx = stripXStart; rx <= stripXEnd; rx++) {
+         const t = pointToTile({ x: rx, y: ry });
+         const td = gs.tiles.get(t);
+         if (!td) continue;
+         if (td.building) {
+            const bt = td.building.type;
+            console.log(`prepareCloneLabs: clearing ${bt} at ${rx},${ry}`);
+            td.building = undefined;
+            clearedCounts[bt] = (clearedCounts[bt] || 0) + 1;
+            totalCleared++;
+         }
+      }
+   }
+
+   if (totalCleared === 0) {
+      showToast("prepareCloneLabs: no buildings were cleared in the right strip");
+   } else {
+      const summary: string[] = [];
+      for (const k of Object.keys(clearedCounts)) summary.push(`${clearedCounts[k]} ${k}`);
+      showToast(`prepareCloneLabs: cleared ${totalCleared} buildings: ${summary.join(", ")}`);
+      // force an immediate visual refresh so artefacts are removed
+      try {
+         notifyGameStateUpdate();
+         const scene = Singleton().sceneManager.getCurrent(WorldScene);
+         if (scene) scene.onGameStateChanged(getGameState());
+      } catch (err) {
+         console.warn('prepareCloneLabs: visual refresh failed', err);
+      }
+   }
 }

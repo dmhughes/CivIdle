@@ -1,11 +1,13 @@
-import { forEach, keysOf, pointToTile } from "../utilities/Helper";
+import type { City } from "../definitions/CityDefinitions";
+import { forEach, keysOf, pointToTile, tileToPoint, type Tile } from "../utilities/Helper";
 import { getServerNow } from "../utilities/ServerNow";
-import { applyBuildingDefaults, findSpecialBuilding, getRandomEmptyTiles } from "./BuildingLogic";
+import { applyBuildingDefaults, getRandomEmptyTiles, isSpecialBuilding } from "./BuildingLogic";
 import { Config } from "./Config";
 import type { GameOptions, GameState } from "./GameState";
 import { getGrid } from "./IntraTickCache";
 import { unlockTech } from "./TechLogic";
 import { ensureTileFogOfWar, sortByDistance } from "./TerrainLogic";
+import type { ICentrePompidouBuildingData } from "./Tile";
 import { makeBuilding } from "./Tile";
 
 export function initializeGameState(gameState: GameState, options: GameOptions) {
@@ -126,18 +128,67 @@ export function initializeGameState(gameState: GameState, options: GameOptions) 
       }
    });
 
-   // Ensure Centre Pompidou exists on startup — if not, place it on a random empty tile
-   if (!findSpecialBuilding("CentrePompidou", gameState)) {
-      const tiles = getRandomEmptyTiles(1, gameState);
-      if (tiles.length > 0) {
-         const xy = tiles[0];
-         const tile = gameState.tiles.get(xy);
-         if (tile) {
-            tile.explored = true;
-            tile.building = applyBuildingDefaults(
-               makeBuilding({ type: "CentrePompidou", level: 1, status: "completed" }),
-               opt,
-            );
+   // Ensure Centre Pompidou exists on startup — place it deterministically
+   const hasPompidou = Array.from(gameState.tiles.values()).some(
+      (tile) => tile.building?.type === "CentrePompidou",
+   );
+
+   if (!hasPompidou) {
+      const allCities = new Set<City>(Object.keys(Config.City) as City[]);
+
+      const sortedTiles = Array.from(gameState.tiles.entries()).sort((a, b) => {
+         const pa = tileToPoint(a[0] as Tile);
+         const pb = tileToPoint(b[0] as Tile);
+         const dy = pb.y - pa.y;
+         if (dy !== 0) return dy;
+         return pb.x - pa.x;
+      });
+
+      const createPompidou = (): ICentrePompidouBuildingData => {
+         const created = applyBuildingDefaults(
+            makeBuilding({ type: "CentrePompidou", level: 1, status: "completed" }),
+            opt,
+         ) as ICentrePompidouBuildingData;
+         created.cities = new Set(allCities);
+         const level = Math.max(1, created.cities.size);
+         created.level = level;
+         created.desiredLevel = level;
+         created.status = "completed";
+         return created;
+      };
+
+      let placed = false;
+
+      // Prefer an empty tile closest to bottom-right
+      for (const [, td] of sortedTiles) {
+         if (!td.building) {
+            const created = createPompidou();
+            td.explored = true;
+            td.building = created;
+            placed = true;
+            break;
+         }
+      }
+
+      // Replace first non-special building if still not placed
+      if (!placed) {
+         for (const [, td] of sortedTiles) {
+            if (td.building && !isSpecialBuilding(td.building.type)) {
+               td.explored = true;
+               td.building = createPompidou();
+               placed = true;
+               break;
+            }
+         }
+      }
+
+      // Final fallback: force into the bottom-right-most tile
+      if (!placed) {
+         for (const [, td] of sortedTiles) {
+            td.explored = true;
+            td.building = createPompidou();
+            placed = true;
+            break;
          }
       }
    }

@@ -3,11 +3,12 @@ import {
    applyBuildingDefaults,
    checkBuildingMax,
    findSpecialBuilding,
+   isSpecialBuilding,
 } from "../../../shared/logic/BuildingLogic";
 import { Config } from "../../../shared/logic/Config";
 import type { GameState } from "../../../shared/logic/GameState";
 import { getGameOptions, getGameState, notifyGameStateUpdate } from "../../../shared/logic/GameStateLogic";
-import { makeBuilding } from "../../../shared/logic/Tile";
+import { makeBuilding, type ITileData } from "../../../shared/logic/Tile";
 import { pointToTile, tileToPoint, type Tile } from "../../../shared/utilities/Helper";
 import { WorldScene } from "../scenes/WorldScene";
 import { showToast } from "../ui/GlobalModal";
@@ -58,23 +59,17 @@ export function buildMinesInLowerRightQuadrant(): void {
    }
    const cityCfg = Config.City[gs.city];
    const size = cityCfg.size;
-   const tiles = Array.from(gs.tiles.keys()) as Tile[];
+   const tiles = Array.from(gs.tiles.entries()) as [Tile, ITileData][];
 
-   const loggingTiles: Tile[] = [];
-   const stoneTiles: Tile[] = [];
-   const waterTiles: Tile[] = [];
-
-   for (const t of tiles) {
-      const p = tileToPoint(t);
-      if (!inLowerRightQuadrant(p.x, p.y, size)) continue;
-      const tileData = gs.tiles.get(t);
-      if (!tileData) continue;
-      if (tileData.building) continue; // skip occupied
-      const deposits = tileData.deposit;
-      if (deposits.Wood) loggingTiles.push(t);
-      if (deposits.Stone) stoneTiles.push(t);
-      if (deposits.Water) waterTiles.push(t);
-   }
+   // Sort all tiles by distance to bottom-right corner (size-1,size-1)
+   const corner = { x: size - 1, y: size - 1 };
+   const sorted = tiles.sort((a, b) => {
+      const pa = tileToPoint(a[0]);
+      const pb = tileToPoint(b[0]);
+      const da = Math.hypot(corner.x - pa.x, corner.y - pa.y);
+      const db = Math.hypot(corner.x - pb.x, corner.y - pb.y);
+      return da - db;
+   });
 
    // Count existing buildings first
    let placedLogging = 0;
@@ -88,78 +83,79 @@ export function buildMinesInLowerRightQuadrant(): void {
    }
 
    const options = getGameOptions();
+   // We want final total of 7 of each (1 initial + 6 added). Compute needed per-type below.
 
-   const takeAndPlace = (
-      list: Tile[],
-      type: Building,
-      limit: number,
-      desiredLevel: number,
-      counterRef: (n: number) => void,
-   ) => {
-      for (let i = 0; i < Math.min(limit, list.length); i++) {
-         const xy = list[i];
-         const b = applyBuildingDefaults(makeBuilding({ type }), options);
-         // Ensure the building starts at level 1 and requests the desiredLevel so normal construction occurs
-         b.level = 1;
-         b.desiredLevel = desiredLevel;
-         b.status = "building";
-         const td = gs.tiles.get(xy);
-         if (td) {
-            td.building = b;
-            td.explored = true;
-            counterRef(1);
-         }
-      }
+   const placeBuildingAt = (xy: Tile, type: Building, desiredLevel = 16): boolean => {
+      const td = gs.tiles.get(xy);
+      if (!td) return false;
+      // Respect global max
+      if (!checkBuildingMax(type, gs)) return false;
+      const created = applyBuildingDefaults(makeBuilding({ type }), options);
+      created.level = 1;
+      created.desiredLevel = desiredLevel;
+      created.status = "building";
+      td.building = created;
+      td.explored = true;
+      return true;
    };
 
-   // Try lower-right first
-   takeAndPlace(loggingTiles, "LoggingCamp", 6, 16, (n) => {
+   const tryPlaceForType = (
+      resourceKey: keyof typeof Config.Resource | null,
+      type: Building,
+      target: number,
+      counter: (n: number) => void,
+   ) => {
+      let placed = 0;
+      if (target <= 0) {
+         counter(0);
+         return;
+      }
+      // Pass 1: empty tiles with deposit
+      for (const [xy, td] of sorted) {
+         if (placed >= target) break;
+         if (td.building) continue;
+         if (resourceKey && !(td.deposit as Record<string, unknown>)[resourceKey as string]) continue;
+         if (placeBuildingAt(xy, type)) placed++;
+      }
+      // Pass 2: replace non-special tiles with deposit
+      for (const [xy, td] of sorted) {
+         if (placed >= target) break;
+         if (!td.building) continue;
+         if (isSpecialBuilding(td.building.type)) continue;
+         if (resourceKey && !(td.deposit as Record<string, unknown>)[resourceKey as string]) continue;
+         if (placeBuildingAt(xy, type)) placed++;
+      }
+      // Pass 3: empty tiles without deposit
+      for (const [xy, td] of sorted) {
+         if (placed >= target) break;
+         if (td.building) continue;
+         if (placeBuildingAt(xy, type)) placed++;
+      }
+      // Pass 4: replace non-special tiles without deposit
+      for (const [xy, td] of sorted) {
+         if (placed >= target) break;
+         if (!td.building) continue;
+         if (isSpecialBuilding(td.building.type)) continue;
+         if (placeBuildingAt(xy, type)) placed++;
+      }
+      counter(placed);
+   };
+
+   // LoggingCamp uses Wood, StoneQuarry uses Stone, Aqueduct uses Water
+   // Compute how many more are needed to reach a total of 7
+   const needLogging = Math.max(0, 7 - placedLogging);
+   const needStone = Math.max(0, 7 - placedStone);
+   const needWater = Math.max(0, 7 - placedWater);
+
+   tryPlaceForType("Wood", "LoggingCamp", needLogging, (n) => {
       placedLogging += n;
    });
-   takeAndPlace(stoneTiles, "StoneQuarry", 6, 16, (n) => {
+   tryPlaceForType("Stone", "StoneQuarry", needStone, (n) => {
       placedStone += n;
    });
-   takeAndPlace(waterTiles, "Aqueduct", 6, 16, (n) => {
+   tryPlaceForType("Water", "Aqueduct", needWater, (n) => {
       placedWater += n;
    });
-
-   // If we didn't place enough of any type, search upper-right quadrant and continue
-   if (placedLogging < 6 || placedStone < 6 || placedWater < 6) {
-      const loggingUpper: Tile[] = [];
-      const stoneUpper: Tile[] = [];
-      const waterUpper: Tile[] = [];
-      for (const t of tiles) {
-         const p = tileToPoint(t);
-         if (!inUpperRightQuadrant(p.x, p.y, size)) continue;
-         const tileData = gs.tiles.get(t);
-         if (!tileData) continue;
-         if (tileData.building) continue; // skip occupied
-         const deposits = tileData.deposit;
-         if (deposits.Wood) loggingUpper.push(t);
-         if (deposits.Stone) stoneUpper.push(t);
-         if (deposits.Water) waterUpper.push(t);
-      }
-
-      if (placedLogging < 6) {
-         // skip already placed count
-         const needed = 6 - placedLogging;
-         takeAndPlace(loggingUpper, "LoggingCamp", needed, 16, (n: number) => {
-            placedLogging += n;
-         });
-      }
-      if (placedStone < 6) {
-         const needed = 6 - placedStone;
-         takeAndPlace(stoneUpper, "StoneQuarry", needed, 16, (n: number) => {
-            placedStone += n;
-         });
-      }
-      if (placedWater < 6) {
-         const needed = 6 - placedWater;
-         takeAndPlace(waterUpper, "Aqueduct", needed, 16, (n: number) => {
-            placedWater += n;
-         });
-      }
-   }
 
    showToast(
       `Placed ${placedLogging} Logging Camps, ${placedStone} Stone Quarries, ${placedWater} Aqueducts`,

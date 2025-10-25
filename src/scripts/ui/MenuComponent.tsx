@@ -10,7 +10,7 @@ import { L, t } from "../../../shared/utilities/i18n";
 import Bat from "../../images/Bat.svg";
 import SpiderWeb from "../../images/SpiderWeb.svg";
 import { compressSave, saveGame, useFloatingMode } from "../Global";
-import { buildApartmentsLeftSide2, buildApartmentsStripAndLeftColumn, buildMinesInLowerRightQuadrant, prepareAtomiumAndOxfordUniversity, prepareCNTowerMaterial, prepareCondoMaterials, replaceApartmentsWithCondos } from "../logic/davescripts";
+import { buildApartmentsStripAndLeftColumn, buildMinesInLowerRightQuadrant, prepareAtomiumAndOxfordUniversity, prepareCNTowerMaterial, prepareCondoMaterials, replaceApartmentsWithCondos } from "../logic/davescripts";
 import { client, usePlatformInfo, useUser } from "../rpc/RPCClient";
 import { SteamClient, isSteam } from "../rpc/SteamClient";
 import { getOwnedTradeTile } from "../scenes/PathFinder";
@@ -420,15 +420,7 @@ export function MenuComponent(): React.ReactNode {
                   >
                      <MenuItem check={false}>{"003 - Prepare Condo Materials"}</MenuItem>
                   </div>
-                  <div
-                     className="menu-popover-item"
-                     onPointerDown={() => {
-                        buildApartmentsLeftSide2();
-                        setActive(null);
-                     }}
-                  >
-                     <MenuItem check={false}>{"004 - Build Apartments 2"}</MenuItem>
-                  </div>
+                  {/* 004 was removed to keep the list contiguous */}
                   <div
                      className="menu-popover-item"
                      onPointerDown={() => {
@@ -436,7 +428,7 @@ export function MenuComponent(): React.ReactNode {
                         setActive(null);
                      }}
                   >
-                     <MenuItem check={false}>{"005 - Replace Apartments with Condos"}</MenuItem>
+                     <MenuItem check={false}>{"004 - Replace Apartments with Condos"}</MenuItem>
                   </div>
                   <div
                      className="menu-popover-item"
@@ -445,7 +437,7 @@ export function MenuComponent(): React.ReactNode {
                         setActive(null);
                      }}
                   >
-                     <MenuItem check={false}>{"006 - Prepare CN Tower Material"}</MenuItem>
+                     <MenuItem check={false}>{"005 - Prepare CN Tower Material"}</MenuItem>
                   </div>
                   <div
                      className="menu-popover-item"
@@ -454,7 +446,7 @@ export function MenuComponent(): React.ReactNode {
                         setActive(null);
                      }}
                   >
-                     <MenuItem check={false}>{"007 - Prepare Atomium and Ox Uni"}</MenuItem>
+                     <MenuItem check={false}>{"006 - Prepare Atomium and Ox Uni"}</MenuItem>
                   </div>
                </div>
             </div>

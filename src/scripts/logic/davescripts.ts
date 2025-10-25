@@ -302,7 +302,7 @@ export function buildMinesInLowerRightQuadrant(): void {
    }
 }
 
-export function buildApartmentsStripAndLeftColumn(): void {
+export async function buildApartmentsStripAndLeftColumn(): Promise<void> {
    const gs = getGameState();
    if (!gs) {
       showToast("Game not ready");
@@ -313,8 +313,8 @@ export function buildApartmentsStripAndLeftColumn(): void {
    const size = cityCfg.size;
 
    // Top-right strip: 10 tiles wide from right edge inward, along the top rows
-   // Top-right area: start 10 tiles left of the top-right corner and fill rows left->right
-   const startX = Math.max(0, size - 1 - 10);
+   // Use 10-wide strip: columns [size-10 .. size-1]
+   const startX = Math.max(0, size - 10);
    const startY = 0;
 
    // Desired counts for the top area
@@ -425,62 +425,110 @@ export function buildApartmentsStripAndLeftColumn(): void {
 
    showToast(`Top area setup: ${topSummary.join(", ")}`);
 
-   // Left-side vertical strip: ensure exactly 400 Apartments total.
-   const desiredTotal = 400;
+   // Apartments: place in batches of 25 starting from top-left, filling columns top->bottom
+   // Build until total of 750 apartments (user requested)
+   const desiredTotal = 750;
+   // Count existing apartments and request upgrades to level 10
    let existingApartments = 0;
-   // First pass: count and upgrade existing Apartments to level 10 (do not count them as placed here)
    for (const [, tileData] of gs.tiles) {
       if (tileData.building && tileData.building.type === ("Apartment" as Building)) {
          existingApartments++;
-         // Request upgrade to level 10, allow normal construction to proceed
          if ((tileData.building.desiredLevel ?? tileData.building.level) < 10) {
             tileData.building.desiredLevel = 10;
          }
       }
    }
 
-   let remaining = Math.max(0, desiredTotal - existingApartments);
-   let placedApartments = 0;
-   if (remaining === 0) {
-      showToast(`Already have ${existingApartments} Apartments (upgraded to level 10 where necessary)`);
+   let totalNow = existingApartments;
+   if (totalNow >= desiredTotal) {
+      showToast(`Already have ${totalNow} Apartments (upgraded where necessary)`);
+      notifyGameStateUpdate();
    } else {
-      // Fill columns left-to-right, top-to-bottom, only placing on empty tiles
-      const maxCols = Math.min(size, Math.ceil(desiredTotal / Math.max(1, size)));
-      outer: for (let cx = 0; cx < size && remaining > 0; cx++) {
-         for (let y = 0; y < size && remaining > 0; y++) {
-            const pt = { x: cx, y };
-            const tile = pointToTile(pt);
-            const td = gs.tiles.get(tile);
-            if (!td) continue;
-            if (td.building) continue; // only place on empty tiles
-            try {
-               if (!checkBuildingMax("Apartment" as Building, gs)) {
-                  // building max prevents further placement
-                  break outer;
-               }
-            } catch (e) {
-               // ignore and proceed
-            }
-            const createdApartment = applyBuildingDefaults(
-               makeBuilding({ type: "Apartment" as Building }),
-               options,
-            );
-            createdApartment.level = 1;
-            createdApartment.desiredLevel = 10;
-            createdApartment.status = "building";
-            td.building = createdApartment;
-            td.explored = true;
-            placedApartments++;
-            remaining--;
+   const batchSize = 100;
+      // Helper: sleep until next tick
+      const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+      // Generator of candidate tiles in column-major order starting at x=0,y=0
+      const candidates: Tile[] = [];
+      for (let x = 0; x < size; x++) {
+         for (let y = 0; y < size; y++) {
+            candidates.push(pointToTile({ x, y }));
          }
       }
-      const totalNow = existingApartments + placedApartments;
-      showToast(`Placed ${placedApartments} Apartments; total now ${totalNow}/${desiredTotal}`);
-      if (totalNow < desiredTotal) {
-         showToast(`Could only reach ${totalNow}/${desiredTotal} Apartments (map size or building limits)`);
+
+      let candIndex = 0;
+      outerBatches: while (totalNow < desiredTotal) {
+         const need = Math.min(batchSize, desiredTotal - totalNow);
+         const placedThisBatch: Tile[] = [];
+
+         // Place up to 'need' apartments following candidate order
+         while (placedThisBatch.length < need && candIndex < candidates.length) {
+            const xy = candidates[candIndex++];
+            const td = gs.tiles.get(xy);
+            if (!td) continue;
+            if (td.building) continue;
+            try {
+               if (!checkBuildingMax("Apartment" as Building, gs)) {
+                  // Global limit reached, stop all placement
+                  break outerBatches;
+               }
+            } catch (e) {
+               // ignore and try
+            }
+            try {
+               const created = applyBuildingDefaults(makeBuilding({ type: "Apartment" as Building }), options);
+               created.level = 0;
+               created.desiredLevel = 10;
+               created.status = "building";
+               td.building = created;
+               td.explored = true;
+               placedThisBatch.push(xy);
+            } catch (err) {
+               // ignore failures
+            }
+         }
+
+         if (placedThisBatch.length === 0) {
+            // No space in map to place further apartments
+            showToast(`Could only place ${totalNow}/${desiredTotal} Apartments (map full)`);
+            break;
+         }
+
+         totalNow += placedThisBatch.length;
+         showToast(`Placed ${placedThisBatch.length} Apartments (batch). Waiting for completion...`);
+         notifyGameStateUpdate();
+
+         // Wait for the batch to complete: poll until all tiles in placedThisBatch are completed
+         let attempts = 0;
+         while (true) {
+            let allDone = true;
+            for (const xy of placedThisBatch) {
+               const td = gs.tiles.get(xy);
+               if (!td || !td.building) continue;
+               const b = td.building;
+               if (b.status === "building") {
+                  allDone = false;
+                  break;
+               }
+               if ((b.desiredLevel ?? b.level) > (b.level ?? 0) && b.status !== "completed") {
+                  allDone = false;
+                  break;
+               }
+            }
+            if (allDone) break;
+            // avoid tight loop; wait 1s then recheck
+            await sleep(1000);
+            attempts++;
+            // safety: after many attempts, give up and continue to next batch to avoid infinite loop
+            if (attempts > 300) break; // ~5 minutes
+         }
+
+         showToast(`Batch completed: ${placedThisBatch.length} Apartments`);
+         notifyGameStateUpdate();
       }
+
+      showToast(`Apartment placement finished: ${totalNow}/${desiredTotal}`);
    }
-   notifyGameStateUpdate();
 }
 
 export function prepareCondoMaterials(): void {
@@ -758,53 +806,8 @@ export function prepareCondoMaterials(): void {
    notifyGameStateUpdate();
 }
 
-export function buildApartmentsLeftSide2(): void {
-   const gs = getGameState();
-   if (!gs) {
-      showToast("Game not ready");
-      return;
-   }
-   const options = getGameOptions();
-   const cityCfg = Config.City[gs.city];
-   const size = cityCfg.size;
-
-   const target = 350;
-   let placed = 0;
-
-   outer: for (let x = 0; x < size && placed < target; x++) {
-      for (let y = 0; y < size && placed < target; y++) {
-         const pt = { x, y };
-         const tile = pointToTile(pt);
-         const td = gs.tiles.get(tile);
-         if (!td) continue;
-         // Only place on empty tiles; do not increment counter if tile not empty
-         if (td.building) continue;
-         try {
-            if (!checkBuildingMax("Apartment" as Building, gs)) {
-               // global limit reached; stop trying
-               break outer;
-            }
-         } catch (e) {
-            // ignore and attempt placement
-         }
-         try {
-            const created = applyBuildingDefaults(makeBuilding({ type: "Apartment" as Building }), options);
-            // Start at level 0 and request level 10 so construction occurs normally
-            created.level = 0;
-            created.desiredLevel = 10;
-            created.status = "building";
-            td.building = created;
-            td.explored = true;
-            placed++;
-         } catch (err) {
-            // ignore failures and continue; do not increment placed
-         }
-      }
-   }
-
-   showToast(`Placed ${placed} Apartments (target ${target})`);
-   notifyGameStateUpdate();
-}
+// buildApartmentsLeftSide2 removed per user request: second apartment script killed off. Use
+// buildApartmentsStripAndLeftColumn() which now builds apartments in batches until target 750.
 
 export function replaceApartmentsWithCondos(): void {
    const gs = getGameState();

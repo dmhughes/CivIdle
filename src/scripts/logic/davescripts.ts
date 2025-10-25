@@ -2,8 +2,7 @@ import type { Building } from "../../../shared/definitions/BuildingDefinitions";
 import {
    applyBuildingDefaults,
    checkBuildingMax,
-   findSpecialBuilding,
-   isSpecialBuilding,
+   findSpecialBuilding
 } from "../../../shared/logic/BuildingLogic";
 import { Config } from "../../../shared/logic/Config";
 import type { GameState } from "../../../shared/logic/GameState";
@@ -117,27 +116,14 @@ export function buildMinesInLowerRightQuadrant(): void {
          if (resourceKey && !(td.deposit as Record<string, unknown>)[resourceKey as string]) continue;
          if (placeBuildingAt(xy, type)) placed++;
       }
-      // Pass 2: replace non-special tiles with deposit
-      for (const [xy, td] of sorted) {
-         if (placed >= target) break;
-         if (!td.building) continue;
-         if (isSpecialBuilding(td.building.type)) continue;
-         if (resourceKey && !(td.deposit as Record<string, unknown>)[resourceKey as string]) continue;
-         if (placeBuildingAt(xy, type)) placed++;
-      }
       // Pass 3: empty tiles without deposit
       for (const [xy, td] of sorted) {
          if (placed >= target) break;
          if (td.building) continue;
          if (placeBuildingAt(xy, type)) placed++;
       }
-      // Pass 4: replace non-special tiles without deposit
-      for (const [xy, td] of sorted) {
-         if (placed >= target) break;
-         if (!td.building) continue;
-         if (isSpecialBuilding(td.building.type)) continue;
-         if (placeBuildingAt(xy, type)) placed++;
-      }
+      // NOTE: we do NOT perform replacement passes here to avoid overwriting
+      // existing buildings. This preserves the "never overwrite" rule.
       counter(placed);
    };
 
@@ -560,10 +546,9 @@ export function prepareCondoMaterials(): void {
    for (const p of plan) placedCounts[p.type] = 0;
    placedCounts.Pizzeria = 0;
 
-   // Rules: skip the first 6 rows (they already have buildings), then fill
+   // Rules: skip the first 8 rows (0-based index 8 == 9th row), then fill
    // non-pizzeria plan into the strip row-by-row, left->right, wrapping down.
-   // After those are placed, leave a 3-row gap, then place 50 Pizzerias.
-   const skipTopRows = 6;
+   const skipTopRows = 8; // User requested to start at row 9 (0-based index 8)
    const pizzeriaGapRows = 3;
    const pizzeriaCount = 50;
 
@@ -571,15 +556,33 @@ export function prepareCondoMaterials(): void {
    let placedForCurrent = 0;
 
    // Start placing at row = skipTopRows
+   // Deterministic placement: do NOT overwrite tiles. Skip occupied tiles
+   // unless the existing building is the same type, in which case request an
+   // upgrade and count it toward the plan.
    for (let y = skipTopRows; y < size && planIndex < plan.length; y++) {
       for (let x = stripStartX; x < size && planIndex < plan.length; x++) {
          const tile = pointToTile({ x, y });
          const td = gs.tiles.get(tile);
          if (!td) continue;
-         // Only place on empty tiles; occupied tiles do not count toward the plan
-         if (td.building) continue;
 
          const current = plan[planIndex];
+         // If tile already occupied, only take it if it's the same type (upgrade)
+         if (td.building) {
+            if (td.building.type === current.type) {
+               if ((td.building.desiredLevel ?? td.building.level) < requiredLevel) {
+                  td.building.desiredLevel = requiredLevel;
+               }
+               placedForCurrent++;
+               placedCounts[current.type] = (placedCounts[current.type] || 0) + 1;
+            }
+            // otherwise skip occupied tile
+            if (placedForCurrent >= current.count) {
+               planIndex++;
+               placedForCurrent = 0;
+            }
+            continue;
+         }
+
          try {
             if (!checkBuildingMax(current.type, gs)) {
                // Can't place more of this type due to global limits — skip to next type
@@ -592,6 +595,7 @@ export function prepareCondoMaterials(): void {
          }
 
          try {
+            // Place only on empty tiles (do not overwrite)
             const created = applyBuildingDefaults(makeBuilding({ type: current.type }), options);
             created.level = 1;
             created.desiredLevel = requiredLevel;
@@ -611,49 +615,42 @@ export function prepareCondoMaterials(): void {
       }
    }
 
-   // After placing non-pizzeria items, leave a 3-row gap and then place Pizzerias
+   // After placing non-pizzeria items, place Pizzerias deterministically starting at row 15 (0-based 14)
    let pPlaced = 0;
-   let pStartY = skipTopRows;
-   // advance pStartY to the row after the last attempted placement for non-pizzas
-   // Find the first row below skipTopRows that contains any building placedCounts from plan
-   // We'll simply set pStartY = skipTopRows + number of rows scanned for plan, but since we
-   // scanned until completion (or map end), we'll conservatively set pStartY = skipTopRows + pizzeriaGapRows + Math.floor(0);
-   // Simpler approach: search from skipTopRows downward for the first empty row after we've attempted placements
-   // We'll pick the first row >= skipTopRows where at least one tile in the strip is empty and use that as the start
-   let foundRowAfterPlan: number | null = null;
-   for (let y = skipTopRows; y < size; y++) {
-      // consider this row as candidate start if at least one tile in strip is empty
-      let hasEmpty = false;
-      for (let x = stripStartX; x < size; x++) {
-         const td = gs.tiles.get(pointToTile({ x, y }));
-         if (td && !td.building) {
-            hasEmpty = true;
-            break;
-         }
-      }
-      if (hasEmpty) {
-         foundRowAfterPlan = y;
-         break;
-      }
-   }
-   if (foundRowAfterPlan !== null) {
-      pStartY = foundRowAfterPlan + pizzeriaGapRows;
-   } else {
-      pStartY = skipTopRows + pizzeriaGapRows;
-   }
+   // Start Pizzerias at 0-based row 14 (the 15th row). Clamp to map.
+   const requestedPizzeriaStart = 14;
+   const pStartY = Math.min(size - 1, requestedPizzeriaStart);
 
-   // Place pizzerias starting at pStartY left->right across the strip
-   outerPizza: for (let y = pStartY; y < size && pPlaced < pizzeriaCount; y++) {
+   // Place pizzerias starting at pStartY left->right across the strip (deterministic)
+   const stripWidth = Math.max(1, size - stripStartX);
+   for (let y = pStartY; y < size && pPlaced < pizzeriaCount; y++) {
       for (let x = stripStartX; x < size && pPlaced < pizzeriaCount; x++) {
          const td = gs.tiles.get(pointToTile({ x, y }));
          if (!td) continue;
-         if (td.building) continue;
+
+         // If occupied, only accept if it's already a Pizzeria: upgrade & count it.
+         if (td.building) {
+            if (td.building.type === "Pizzeria") {
+               if ((td.building.desiredLevel ?? td.building.level) < requiredLevel) {
+                  td.building.desiredLevel = requiredLevel;
+               }
+               pPlaced++;
+               placedCounts.Pizzeria = (placedCounts.Pizzeria || 0) + 1;
+            }
+            continue; // don't overwrite
+         }
+
          try {
-            if (!checkBuildingMax("Pizzeria" as Building, gs)) break outerPizza;
+            if (!checkBuildingMax("Pizzeria" as Building, gs)) {
+               // global limit reached
+               y = size; // force outer loop exit
+               break;
+            }
          } catch (e) {
             // ignore
          }
          try {
+            // Place only on empty tile
             const created = applyBuildingDefaults(makeBuilding({ type: "Pizzeria" as Building }), options);
             created.level = 1;
             created.desiredLevel = requiredLevel;
@@ -668,11 +665,22 @@ export function prepareCondoMaterials(): void {
       }
    }
 
-      // Immediately after pizzas, place supporting factories: 5 CheeseMakers, 5 PoultryFarms, 5 FlourMills
+   // Compute last pizza row and start support buildings on the row directly after the pizza block
+   let postYStart: number;
+   if (pPlaced > 0) {
+      const rowsUsed = Math.ceil(pPlaced / stripWidth);
+      const lastPizzaRow = pStartY + rowsUsed - 1;
+      postYStart = Math.min(size - 1, lastPizzaRow + 1);
+   } else {
+      postYStart = Math.min(size - 1, pStartY + 1);
+   }
+
+      // Immediately after pizzas, place supporting farms/factories so pizzas can be produced.
+      // Exact support set and order requested by user: FlourMill, PoultryFarm, CheeseMaker, DairyFarm (5 of each)
       const postPlan: Array<{ type: Building; count: number }> = [
-         { type: "CheeseMaker" as Building, count: 5 },
-         { type: "PoultryFarm" as Building, count: 5 },
          { type: "FlourMill" as Building, count: 5 },
+         { type: "PoultryFarm" as Building, count: 5 },
+         { type: "CheeseMaker" as Building, count: 5 },
          { type: "DairyFarm" as Building, count: 5 },
       ];
 
@@ -680,57 +688,30 @@ export function prepareCondoMaterials(): void {
       const postPlacedCounts: Record<string, number> = {};
       for (const p of postPlan) postPlacedCounts[p.type] = 0;
 
-      let postYStart = pStartY;
-      // If we placed pizzas, try to place these starting on the row after the last pizza row used
-      if (pPlaced > 0) {
-         // find last row where a Pizzeria was placed
-         let lastPizzaRow: number | null = null;
-         for (let y = pStartY; y < size; y++) {
-            let found = false;
-            for (let x = stripStartX; x < size; x++) {
-               const t = gs.tiles.get(pointToTile({ x, y }));
-               if (t?.building && t.building.type === "Pizzeria") {
-                  lastPizzaRow = y;
-                  found = true;
-                  break;
-               }
-            }
-            if (found) continue;
-            // if we passed rows with pizzas and hit a row without, stop searching further
-            if (lastPizzaRow !== null) break;
-         }
-         if (lastPizzaRow !== null) postYStart = lastPizzaRow + 1;
-      }
-
-      // Place each postPlan entry sequentially into the strip left->right, wrapping rows
+   // Place each postPlan entry sequentially into the strip left->right, wrapping rows
       for (const entry of postPlan) {
          let remaining = entry.count;
          for (let y = postYStart; y < size && remaining > 0; y++) {
-            for (let x = stripStartX; x < size && remaining > 0; x++) {
-               const td = gs.tiles.get(pointToTile({ x, y }));
-               if (!td) continue;
-               if (td.building) continue;
-               try {
-                  if (!checkBuildingMax(entry.type, gs)) {
-                     remaining = 0;
-                     break;
-                  }
-               } catch (e) {
-                  // ignore
-               }
-               try {
-                  const created = applyBuildingDefaults(makeBuilding({ type: entry.type }), options);
-                  created.level = 1;
-                  created.desiredLevel = requiredLevel;
-                  created.status = "building";
-                  td.building = created;
-                  td.explored = true;
-                  remaining--;
-                  postPlacedCounts[entry.type] = (postPlacedCounts[entry.type] || 0) + 1;
-               } catch (err) {
-                  // ignore
-               }
+         for (let x = stripStartX; x < size && remaining > 0; x++) {
+            const td = gs.tiles.get(pointToTile({ x, y }));
+            if (!td) continue;
+            // Respect existing buildings in the strip: do not overwrite. Place
+            // support buildings in addition to anything already present, scanning
+            // downward until counts are satisfied or map end.
+            if (td.building) continue;
+            try {
+               const created = applyBuildingDefaults(makeBuilding({ type: entry.type }), options);
+               created.level = 1;
+               created.desiredLevel = requiredLevel;
+               created.status = "building";
+               td.building = created;
+               td.explored = true;
+               remaining--;
+               postPlacedCounts[entry.type] = (postPlacedCounts[entry.type] || 0) + 1;
+            } catch (err) {
+               // ignore placement failures and continue
             }
+         }
          }
          // advance start row for next type so they don't all try to place on same rows
          postYStart += 0; // keep continuous placement; adjust if you want separation
@@ -761,6 +742,20 @@ export function prepareCondoMaterials(): void {
       if (d.Iron) ironTiles.push(t);
       if (d.Copper) copperTiles.push(t);
    }
+
+   // Sort deposit tile lists by distance to bottom-right so mines are placed
+   // as close to the bottom-right corner as possible (deterministic).
+   const corner = { x: size - 1, y: size - 1 };
+   const sortByCorner = (a: Tile, b: Tile) => {
+      const pa = tileToPoint(a);
+      const pb = tileToPoint(b);
+      const da = Math.hypot(corner.x - pa.x, corner.y - pa.y);
+      const db = Math.hypot(corner.x - pb.x, corner.y - pb.y);
+      return da - db;
+   };
+   coalTiles.sort(sortByCorner);
+   ironTiles.sort(sortByCorner);
+   copperTiles.sort(sortByCorner);
 
    const placeMines = (list: Tile[], type: Building, limit: number) => {
       let placed = 0;

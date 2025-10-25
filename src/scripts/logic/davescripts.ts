@@ -517,6 +517,242 @@ export async function buildApartmentsStripAndLeftColumn(): Promise<void> {
    }
 }
 
+export function buildBigBenMaterials(): void {
+   const gs = getGameState();
+   if (!gs) {
+      showToast("Game not ready");
+      return;
+   }
+   const options = getGameOptions();
+   const cityCfg = Config.City[gs.city];
+   const size = cityCfg.size;
+
+   const stripXStart = Math.max(0, size - 10);
+   const startY = 8; // 0-based row 8 == 9th row per user request
+
+   // Precise inventory requested by user
+   const plan: Array<{ type: Building; count: number }> = [
+      { type: "CottonPlantation" as Building, count: 4 },
+      { type: "CottonMill" as Building, count: 8 },
+      { type: "IronForge" as Building, count: 24 },
+      { type: "Marbleworks" as Building, count: 4 },
+      { type: "PaperMaker" as Building, count: 4 },
+      { type: "Stable" as Building, count: 4 },
+      { type: "Brewery" as Building, count: 4 },
+      { type: "PoetrySchool" as Building, count: 4 },
+      { type: "SwordForge" as Building, count: 4 },
+      { type: "Armory" as Building, count: 4 },
+      { type: "PaintersGuild" as Building, count: 8 },
+      { type: "FurnitureWorkshop" as Building, count: 4 },
+      { type: "Shrine" as Building, count: 16 },
+      { type: "MusiciansGuild" as Building, count: 4 },
+      { type: "KnightCamp" as Building, count: 4 },
+      { type: "University" as Building, count: 8 },
+      { type: "Museum" as Building, count: 8 },
+      { type: "Courthouse" as Building, count: 8 },
+      { type: "Parliament" as Building, count: 16 },
+   ];
+
+   // Sort plan entries by ascending building tier (deterministic)
+   const getTier = (b: Building) => {
+      try {
+         // Config.BuildingTier maps names to numbers; fallback to large number
+         return (Config.BuildingTier as Record<string, number>)[b] ?? 9999;
+      } catch (e) {
+         return 9999;
+      }
+   };
+
+   const sortedPlan = plan.slice().sort((a, b) => getTier(a.type) - getTier(b.type));
+
+   const targetLevel = 15;
+   const placedCounts: Record<string, number> = {};
+   for (const p of sortedPlan) placedCounts[p.type] = 0;
+
+   // For each plan entry, place into the rightmost strip starting at row startY.
+   // Only place on empty tiles. If an existing tile in the strip already
+   // contains the same building type, upgrade it (set desiredLevel) and count it.
+   for (const entry of sortedPlan) {
+      let remaining = entry.count;
+
+      // Scan strip rows top->bottom, columns left->right within strip
+      for (let y = startY; y < size && remaining > 0; y++) {
+         for (let x = stripXStart; x < size && remaining > 0; x++) {
+            const tile = pointToTile({ x, y });
+            const td = gs.tiles.get(tile);
+            if (!td) continue;
+
+            if (td.building) {
+               if (td.building.type === entry.type) {
+                  // Upgrade existing building to target level if needed
+                  if ((td.building.desiredLevel ?? td.building.level) < targetLevel) {
+                     td.building.desiredLevel = targetLevel;
+                  }
+                  placedCounts[entry.type] = (placedCounts[entry.type] || 0) + 1;
+                  remaining--;
+               }
+               // otherwise skip occupied tile
+               continue;
+            }
+
+            // empty tile: try to place
+            try {
+               if (!checkBuildingMax(entry.type, gs)) {
+                  // cannot place more of this type globally; stop attempting placements for this type
+                  remaining = 0;
+                  break;
+               }
+            } catch (e) {
+               // ignore check errors and attempt placement anyway
+            }
+
+            try {
+               const created = applyBuildingDefaults(makeBuilding({ type: entry.type }), options);
+               created.level = 0;
+               created.desiredLevel = targetLevel;
+               created.status = "building";
+               td.building = created;
+               td.explored = true;
+               placedCounts[entry.type] = (placedCounts[entry.type] || 0) + 1;
+               remaining--;
+            } catch (err) {
+               // ignore placement failures
+            }
+         }
+      }
+
+      // If we still haven't satisfied the count, scan entire map for existing buildings of this type
+      // and upgrade them to target level (count them as satisfied). This is a graceful fallback.
+      if (remaining > 0) {
+         for (const [, tileData] of gs.tiles) {
+            if (remaining <= 0) break;
+            if (tileData.building && tileData.building.type === entry.type) {
+               if ((tileData.building.desiredLevel ?? tileData.building.level) < targetLevel) {
+                  tileData.building.desiredLevel = targetLevel;
+               }
+               placedCounts[entry.type] = (placedCounts[entry.type] || 0) + 1;
+               remaining--;
+            }
+         }
+      }
+   }
+
+   const summary: string[] = [];
+   for (const p of sortedPlan) {
+      const n = placedCounts[p.type] || 0;
+      summary.push(`${n} ${p.type}`);
+   }
+
+      // --- Ensure Iron and Copper mines: 2x IronMiningCamp and 2x CopperMiningCamp total
+      // Count existing mines and upgrade them to target level if needed
+      let existingIron = 0;
+      let existingCopper = 0;
+      for (const [, td] of gs.tiles) {
+         if (!td?.building) continue;
+         if (td.building.type === "IronMiningCamp") {
+            existingIron++;
+            if ((td.building.desiredLevel ?? td.building.level) < targetLevel) td.building.desiredLevel = targetLevel;
+         } else if (td.building.type === "CopperMiningCamp") {
+            existingCopper++;
+            if ((td.building.desiredLevel ?? td.building.level) < targetLevel) td.building.desiredLevel = targetLevel;
+         }
+      }
+
+      const needIron = Math.max(0, 2 - existingIron);
+      const needCopper = Math.max(0, 2 - existingCopper);
+
+      if (needIron > 0 || needCopper > 0) {
+         // collect empty deposit tiles for each resource
+         const ironTiles: Tile[] = [];
+         const copperTiles: Tile[] = [];
+         for (const t of Array.from(gs.tiles.keys()) as Tile[]) {
+            const td = gs.tiles.get(t);
+            if (!td) continue;
+            if (td.building) continue; // only on empty tiles
+            const d = td.deposit;
+            if (d?.Iron) ironTiles.push(t);
+            if (d?.Copper) copperTiles.push(t);
+         }
+
+         const corner = { x: size - 1, y: size - 1 };
+         const dist = (tile: Tile) => {
+            const p = tileToPoint(tile);
+            return Math.hypot(corner.x - p.x, corner.y - p.y);
+         };
+         ironTiles.sort((a, b) => dist(a) - dist(b));
+         copperTiles.sort((a, b) => dist(a) - dist(b));
+
+         let placedIron = 0;
+         let placedCopper = 0;
+
+         // Place iron mines
+         for (let i = 0; i < ironTiles.length && placedIron < needIron; i++) {
+            const tile = ironTiles[i];
+            const td = gs.tiles.get(tile);
+            if (!td) continue;
+            try {
+               if (!checkBuildingMax("IronMiningCamp" as Building, gs)) break;
+            } catch (e) {
+               // ignore
+            }
+            try {
+               const b = applyBuildingDefaults(makeBuilding({ type: "IronMiningCamp" as Building }), options);
+               b.level = 0;
+               b.desiredLevel = targetLevel;
+               b.status = "building";
+               td.building = b;
+               td.explored = true;
+               placedIron++;
+            } catch (err) {
+               // ignore
+            }
+         }
+
+         // Place copper mines
+         for (let i = 0; i < copperTiles.length && placedCopper < needCopper; i++) {
+            const tile = copperTiles[i];
+            const td = gs.tiles.get(tile);
+            if (!td) continue;
+            try {
+               if (!checkBuildingMax("CopperMiningCamp" as Building, gs)) break;
+            } catch (e) {
+               // ignore
+            }
+            try {
+               const b = applyBuildingDefaults(makeBuilding({ type: "CopperMiningCamp" as Building }), options);
+               b.level = 0;
+               b.desiredLevel = targetLevel;
+               b.status = "building";
+               td.building = b;
+               td.explored = true;
+               placedCopper++;
+            } catch (err) {
+               // ignore
+            }
+         }
+
+         existingIron += placedIron;
+         existingCopper += placedCopper;
+         // report if we couldn't reach the required counts
+         if (existingIron < 2 || existingCopper < 2) {
+            showToast(`Warning: Mines requirement not fully satisfied: Iron ${existingIron}/2, Copper ${existingCopper}/2`);
+         } else {
+            showToast(`Mines placed/upgraded: Iron ${existingIron}/2, Copper ${existingCopper}/2`);
+         }
+      } else {
+         showToast(`Mines already satisfied: Iron ${existingIron}/2, Copper ${existingCopper}/2`);
+      }
+
+   showToast(`Build Big Ben Materials started in right strip: ${summary.join(", ")}`);
+      notifyGameStateUpdate();
+      try {
+         const scene = Singleton().sceneManager.getCurrent(WorldScene);
+         if (scene) scene.onGameStateChanged(getGameState());
+      } catch (err) {
+         // ignore visual refresh errors
+      }
+}
+
 export function prepareCondoMaterials(): void {
    const gs = getGameState();
    if (!gs) {
@@ -545,6 +781,64 @@ export function prepareCondoMaterials(): void {
    const placedCounts: Record<string, number> = {};
    for (const p of plan) placedCounts[p.type] = 0;
    placedCounts.Pizzeria = 0;
+
+   // --- Demolition phase (new): scan the rightmost 10-column strip starting at row 9
+   // Keep any wonders (special) and keep any tile that already contains a matching
+   // deposit-extracting building (e.g., IronMiningCamp on an Iron deposit). Delete
+   // other buildings. Scan row-by-row starting at row index 8; when an empty tile
+   // is encountered during the scan, stop the demolition phase entirely.
+   const demolitionStartRow = 8; // 0-based row 8 == 9th row
+   let demolishedCount = 0;
+   let stopDemolition = false;
+   for (let y = demolitionStartRow; y < size && !stopDemolition; y++) {
+      for (let x = stripStartX; x < size; x++) {
+         const tile = pointToTile({ x, y });
+         const td = gs.tiles.get(tile);
+         if (!td) continue;
+         // If tile is empty, stop the entire demolition phase (user requested)
+         if (!td.building) {
+            stopDemolition = true;
+            break;
+         }
+
+         const bt = td.building.type;
+         const def = Config.Building[bt];
+
+             // Leave wonders/natural wonders alone
+             if (def && def.special != null) {
+            continue;
+         }
+
+         // If tile has a deposit and the existing building extracts from that deposit,
+         // keep it (it's a mine producing resources)
+         if (td.deposit && def && def.deposit) {
+            // check if any deposit keys overlap
+            let match = false;
+            for (const k of Object.keys(def.deposit)) {
+               if ((td.deposit as Record<string, unknown>)[k]) {
+                  match = true;
+                  break;
+               }
+            }
+            if (match) continue;
+         }
+
+         // Otherwise delete the building in this strip tile
+         td.building = undefined;
+         demolishedCount++;
+      }
+   }
+
+   if (demolishedCount > 0) {
+      showToast(`Demolished ${demolishedCount} non-mine/non-wonder building(s) in right strip before building phase`);
+      try {
+         notifyGameStateUpdate();
+         const scene = Singleton().sceneManager.getCurrent(WorldScene);
+         if (scene) scene.onGameStateChanged(getGameState());
+      } catch (err) {
+         // ignore visual refresh errors
+      }
+   }
 
    // Rules: skip the first 8 rows (0-based index 8 == 9th row), then fill
    // non-pizzeria plan into the strip row-by-row, left->right, wrapping down.

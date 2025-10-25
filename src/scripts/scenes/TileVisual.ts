@@ -330,6 +330,14 @@ export class TileVisual extends Container {
 
       if (!this._tile.explored) {
          this._building.visible = false;
+         // hide any auxiliary UI for unexplored tiles
+         this._level.visible = false;
+         this._bottomText.visible = false;
+         this._construction.visible = false;
+         this._upgrade.visible = false;
+         this._notProducing.visible = false;
+         this.toggleConstructionTween(false);
+         this.toggleUpgradeTween(false);
          return;
       }
 
@@ -340,9 +348,20 @@ export class TileVisual extends Container {
       this.updateDepositLayout();
 
       if (!this._tile.building) {
+         // Ensure all building-related visuals are cleared to avoid artefacts
          this._building.visible = false;
+         this._building.texture = Texture.EMPTY;
          this._lastBuildingType = undefined;
          this._spinner.visible = false;
+         this._level.visible = false;
+         this._level.text = "";
+         this._bottomText.visible = false;
+         this._bottomText.text = "";
+         this._construction.visible = false;
+         this._upgrade.visible = false;
+         this._notProducing.visible = false;
+         this.toggleConstructionTween(false);
+         this.toggleUpgradeTween(false);
          return;
       }
       this._building.visible = true;

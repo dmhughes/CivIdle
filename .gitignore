@@ -25,3 +25,7 @@ out/
 *.sw?
 *.tsbuildinfo
 electron/app.asar
+release/cividle-win32-x64/chrome_100_percent.pak
+release/
+app.asar
+asar_contents.txt

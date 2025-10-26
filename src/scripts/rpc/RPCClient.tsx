@@ -5,7 +5,7 @@ import WorldMap from "../../../shared/definitions/WorldMap.json";
 import { addPetraOfflineTime } from "../../../shared/logic/BuildingLogic";
 import { Config } from "../../../shared/logic/Config";
 import { GOOGLE_PLAY_GAMES_CLIENT_ID } from "../../../shared/logic/Constants";
-import { PremiumTileTextures } from "../../../shared/logic/GameState";
+import { PremiumTileTextures, RankUpFlags } from "../../../shared/logic/GameState";
 import { checksum, getGameOptions, getGameState } from "../../../shared/logic/GameStateLogic";
 import { RpcError, removeTrailingUndefs, rpcClient } from "../../../shared/thirdparty/TRPCClient";
 import type {
@@ -247,6 +247,7 @@ export async function connectWebSocket(): Promise<IWelcomeMessage> {
          `version=${getVersion()}`,
          `build=${getBuildNumber()}`,
          `gameId=${getGameState().id}`,
+         `hash=${await SteamClient.getChecksum()}`,
          `checksum=${checksum.expected}${checksum.actual}`,
       ];
       ws = new WebSocket(`${getServerAddress()}/?${params.join("&")}`);
@@ -346,6 +347,22 @@ export async function connectWebSocket(): Promise<IWelcomeMessage> {
             }
             if (hasFlag(user.attr, UserAttributes.DLC1) && !options.supporterPackPurchased) {
                showModal(<SupporterPackModal />);
+            }
+            switch (options.rankUpFlags) {
+               case RankUpFlags.Unset:
+                  if (user.level <= AccountLevel.Tribune) {
+                     options.rankUpFlags = RankUpFlags.NotUpgraded;
+                  } else {
+                     options.rankUpFlags = RankUpFlags.Upgraded;
+                  }
+                  break;
+               case RankUpFlags.NotUpgraded:
+                  if (user.level > AccountLevel.Tribune) {
+                     client.resetRank();
+                  }
+                  break;
+               case RankUpFlags.Upgraded:
+                  break;
             }
             saveGame().catch(console.error);
             OnUserChanged.emit(user);

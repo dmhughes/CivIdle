@@ -1996,5 +1996,11 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
          });
          break;
       }
+      case "PortOfSingapore": {
+         addMultiplier("Warehouse", { output: building.level, storage: building.level }, buildingName);
+         addMultiplier("Caravansary", { output: building.level, storage: building.level }, buildingName);
+         addMultiplier("Market", { output: building.level, storage: building.level }, buildingName);
+         break;
+      }
    }
 }

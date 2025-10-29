@@ -1,13 +1,15 @@
 Todo:
 - Adjust map size
 - Swiss Bank in Trade Tiles
-- Warehouse/Caravan Storage Upgrade Wonder
 
 Done:
+- New Wonder: Port of Singapore (Globalization) - This wonder can be upgraded and each level provides +1 Production (affects Resource Transport Capacity) and Storage Multiplier to all warehouses and caravansaries
 - Watch Resources in Statistics Office
+- Optimize Player Trade Map: now it should be much smoother when panning or zooming in
 - Improve the performance of path finding for player trades
 - Swiss Bank can now move Koti from Tradeable Resources into Swiss Bank (i.e. choose Koti as the input resources for Swiss Bank)
 - Level Boost now affects Warehouse/Caravansary's import capacity
 - Exploration technology (Renaissance) will unlock cartographer - sending a cartographer cost Science and will explore all tiles on the map
 - Explorer Range upgrade has been moved into earlier techs: 2 Range (Geography -> Writing), 3 Range (Steam Engine -> Construction), 4 Range (Aviation -> Democracy)
 - The following tech will now provide +100% Base Storage for Warehouse and Caravansary: Enlightenment, Railway, Assembly, Globalization, Robotics
+- Progress Towards Next Great Person and Warp now shows estimated time on hover

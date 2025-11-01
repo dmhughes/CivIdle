@@ -10,7 +10,6 @@ import { L, t } from "../../../shared/utilities/i18n";
 import Bat from "../../images/Bat.svg";
 import SpiderWeb from "../../images/SpiderWeb.svg";
 import { compressSave, saveGame, useFloatingMode } from "../Global";
-import { buildApartmentsStripAndLeftColumn, buildBigBenMaterials, buildMinesInLowerRightQuadrant, prepareAtomiumAndOxfordUniversity, prepareCNTowerMaterial, prepareCondoMaterials, replaceApartmentsWithCondos } from "../logic/davescripts";
 import { client, usePlatformInfo, useUser } from "../rpc/RPCClient";
 import { SteamClient, isSteam } from "../rpc/SteamClient";
 import { getOwnedTradeTile } from "../scenes/PathFinder";
@@ -395,9 +394,25 @@ export function MenuComponent(): React.ReactNode {
                >
                   <div
                      className="menu-popover-item"
-                     onPointerDown={() => {
-                        buildMinesInLowerRightQuadrant();
+                     onPointerDown={async () => {
+                        playClick();
                         setActive(null);
+                        try {
+                           // dynamic import so UI doesn't depend on the scripts module at compile time
+                           const mod = await import("../logic/davescripts");
+                           if (mod && typeof mod.buildInitialMines === "function") {
+                              const result = mod.buildInitialMines();
+                              const houses = result.houseResult?.placed ?? 0;
+                              showToast(
+                                 `BuildInitialMines: Houses ${houses}, Aqueducts ${result.aqueductPlaced}, Quarries ${result.stoneQuarryPlaced}, Logging ${result.loggingCampPlaced}`,
+                              );
+                           } else {
+                              showToast("Dave's scripts are not available in this build.");
+                           }
+                        } catch (err) {
+                           playError();
+                           showToast(String(err));
+                        }
                      }}
                   >
                      <MenuItem check={false}>{"001 - Build Initial Mines"}</MenuItem>
@@ -405,7 +420,8 @@ export function MenuComponent(): React.ReactNode {
                   <div
                      className="menu-popover-item"
                      onPointerDown={() => {
-                        buildApartmentsStripAndLeftColumn();
+                        playClick();
+                        showToast("Dave's scripts are not available in this build.");
                         setActive(null);
                      }}
                   >
@@ -414,7 +430,8 @@ export function MenuComponent(): React.ReactNode {
                   <div
                      className="menu-popover-item"
                      onPointerDown={() => {
-                        buildBigBenMaterials();
+                        playClick();
+                        showToast("Dave's scripts are not available in this build.");
                         setActive(null);
                      }}
                   >
@@ -423,7 +440,8 @@ export function MenuComponent(): React.ReactNode {
                   <div
                      className="menu-popover-item"
                      onPointerDown={() => {
-                        prepareCondoMaterials();
+                        playClick();
+                        showToast("Dave's scripts are not available in this build.");
                         setActive(null);
                      }}
                   >
@@ -433,7 +451,8 @@ export function MenuComponent(): React.ReactNode {
                   <div
                      className="menu-popover-item"
                      onPointerDown={() => {
-                        replaceApartmentsWithCondos();
+                        playClick();
+                        showToast("Dave's scripts are not available in this build.");
                         setActive(null);
                      }}
                   >
@@ -442,7 +461,8 @@ export function MenuComponent(): React.ReactNode {
                   <div
                      className="menu-popover-item"
                      onPointerDown={() => {
-                        prepareCNTowerMaterial();
+                        playClick();
+                        showToast("Dave's scripts are not available in this build.");
                         setActive(null);
                      }}
                   >
@@ -451,7 +471,8 @@ export function MenuComponent(): React.ReactNode {
                   <div
                      className="menu-popover-item"
                      onPointerDown={() => {
-                        prepareAtomiumAndOxfordUniversity();
+                        playClick();
+                        showToast("Dave's scripts are not available in this build.");
                         setActive(null);
                      }}
                   >

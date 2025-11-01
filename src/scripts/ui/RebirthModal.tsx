@@ -1,16 +1,17 @@
 import Tippy from "@tippyjs/react";
 import { useEffect, useState } from "react";
-import type { Building } from "../../../shared/definitions/BuildingDefinitions";
 import type { City } from "../../../shared/definitions/CityDefinitions";
 import {
    findSpecialBuilding,
    getBuildingDescription,
-   getMultipliersDescription
+   getMultipliersDescription,
+   getPompidou,
+   getRandomEmptyTiles,
 } from "../../../shared/logic/BuildingLogic";
 import { Config } from "../../../shared/logic/Config";
 import { SUPPORTER_PACK_URL } from "../../../shared/logic/Constants";
 import { RebirthFlags } from "../../../shared/logic/GameState";
-import { getGameOptions } from "../../../shared/logic/GameStateLogic";
+import { getGameOptions, getGameState } from "../../../shared/logic/GameStateLogic";
 import {
    getFreeCityThisWeek,
    getGreatPeopleChoiceCount,
@@ -31,7 +32,8 @@ import {
    range,
    reduceOf,
    rejectIn,
-   safeParseInt
+   safeParseInt,
+   uuid4,
 } from "../../../shared/utilities/Helper";
 import { L, t } from "../../../shared/utilities/i18n";
 import { resetToCity, saveGame, useGameState } from "../Global";
@@ -382,7 +384,7 @@ export function RebirthModal(): React.ReactNode {
                   <div className="row p5">
                      <div className="cc mr10" style={{ width: 50, height: 50 }}>
                         <BuildingSpriteComponent
-                           building={`Headquarter_${nextCity}` as unknown as Building}
+                           building={`Headquarter_${nextCity}` as any}
                            scale={0.5}
                            style={{ filter: "invert(0.75)" }}
                         />
@@ -420,8 +422,10 @@ export function RebirthModal(): React.ReactNode {
                         return;
                      }
 
+                     const gameId = uuid4();
+
                      try {
-                        await Promise.race([client.rebirth(), rejectIn(10)]);
+                        await Promise.race([client.rebirthV2(gameId), rejectIn(10)]);
                      } catch (error) {
                         console.error(error);
                         if (!import.meta.env.DEV && isOnlineUser()) {
@@ -473,9 +477,19 @@ export function RebirthModal(): React.ReactNode {
                      getGameOptions().showTutorial = false;
 
                      playClick();
-                     await resetToCity(nextCity);
+                     await resetToCity(gameId, nextCity);
 
-                     // Pompidou placement is handled during map initialization (initializeGameState)
+                     const pompidou = getPompidou(gs);
+                     if (currentCity !== nextCity && pompidou) {
+                        getRandomEmptyTiles(1, getGameState()).forEach((xy) => {
+                           const tile = getGameState().tiles.get(xy);
+                           if (tile) {
+                              tile.explored = true;
+                              tile.building = pompidou;
+                              pompidou.cities.add(currentCity);
+                           }
+                        });
+                     }
 
                      try {
                         await Promise.all([saveGame(), clientHeartbeat()]);

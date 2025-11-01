@@ -317,25 +317,19 @@ export async function buildApartmentsSupportBuildings(): Promise<void> {
    const withTarget = (arr: Array<{ type: Building; count: number }>, target: number) =>
       arr.map((p) => ({ type: p.type, count: p.count, targetLevel: target }));
 
-   const placedSupport = (size > 2 && supportPlan.length > 0)
+   // User requested support buildings to start at row index 4 (row 5). Use a sensible
+   // fallback: if the map is smaller, start at the last available row.
+   const desiredSupportStart = 4;
+   const placedSupport = supportPlan.length > 0
       ? buildStripPlanNamed({
          stripXStart: startX,
          width: stripWidth,
-         rowStart: Math.min(2, size - 1),
+         rowStart: Math.min(desiredSupportStart, size - 1),
          rowEnd: size - 1,
          plan: withTarget(supportPlan, requiredTopLevel),
          opts: { preserveDeposits: false, upgradeExisting: true },
       })
-      : (supportPlan.length > 0
-         ? buildStripPlanNamed({
-            stripXStart: startX,
-            width: stripWidth,
-            rowStart: Math.min(1, Math.max(0, size - 1)),
-            rowEnd: size - 1,
-            plan: withTarget(supportPlan, requiredTopLevel),
-            opts: { preserveDeposits: false, upgradeExisting: true },
-         })
-         : {} as Record<string, number>);
+      : ({} as Record<string, number>);
 
    const topSummary: string[] = [];
    for (const p of supportPlan) {
@@ -520,7 +514,6 @@ export function buildBigBenMaterials(): void {
    const size = cityCfg.size;
 
    const stripXStart = Math.max(0, size - 10);
-   const startY = 8; // 0-based row 8 == 9th row per user request
 
    // Precise inventory requested by user
    const plan: Array<{ type: Building; count: number }> = [
@@ -558,73 +551,38 @@ export function buildBigBenMaterials(): void {
    const sortedPlan = plan.slice().sort((a, b) => getTier(a.type) - getTier(b.type));
 
    const targetLevel = 15;
+   // Initialize placedCounts for reporting
    const placedCounts: Record<string, number> = {};
    for (const p of sortedPlan) placedCounts[p.type] = 0;
 
-   // For each plan entry, place into the rightmost strip starting at row startY.
-   // Only place on empty tiles. If an existing tile in the strip already
-   // contains the same building type, upgrade it (set desiredLevel) and count it.
+   // Use the reusable strip placer starting at row index 12 (row 13).
+   const stripWidth = Math.max(1, size - stripXStart);
+   const planWithTarget = sortedPlan.map((p) => ({ type: p.type, count: p.count, targetLevel }));
+
+   const placedFromStrip = buildStripPlanNamed({
+      stripXStart,
+      width: stripWidth,
+      rowStart: Math.min(12, Math.max(0, size - 1)), // start at index 12 (row 13), clamp to map
+      rowEnd: size - 1,
+      plan: planWithTarget,
+      opts: { preserveDeposits: false, upgradeExisting: true },
+   });
+
+   // Merge results
+   for (const k of Object.keys(placedFromStrip)) placedCounts[k] = (placedCounts[k] || 0) + (placedFromStrip[k] || 0);
+
+   // Fallback: if any entries are still short, scan whole map and upgrade existing buildings to count them
    for (const entry of sortedPlan) {
-      let remaining = entry.count;
-
-      // Scan strip rows top->bottom, columns left->right within strip
-      for (let y = startY; y < size && remaining > 0; y++) {
-         for (let x = stripXStart; x < size && remaining > 0; x++) {
-            const tile = pointToTile({ x, y });
-            const td = gs.tiles.get(tile);
-            if (!td) continue;
-
-            if (td.building) {
-               if (td.building.type === entry.type) {
-                  // Upgrade existing building to target level if needed
-                  if ((td.building.desiredLevel ?? td.building.level) < targetLevel) {
-                     td.building.desiredLevel = targetLevel;
-                  }
-                  placedCounts[entry.type] = (placedCounts[entry.type] || 0) + 1;
-                  remaining--;
-               }
-               // otherwise skip occupied tile
-               continue;
+      let remaining = Math.max(0, entry.count - (placedCounts[entry.type] || 0));
+      if (remaining <= 0) continue;
+      for (const [, tileData] of gs.tiles) {
+         if (remaining <= 0) break;
+         if (tileData.building && tileData.building.type === entry.type) {
+            if ((tileData.building.desiredLevel ?? tileData.building.level) < targetLevel) {
+               tileData.building.desiredLevel = targetLevel;
             }
-
-            // empty tile: try to place
-            try {
-               if (!checkBuildingMax(entry.type, gs)) {
-                  // cannot place more of this type globally; stop attempting placements for this type
-                  remaining = 0;
-                  break;
-               }
-            } catch (e) {
-               // ignore check errors and attempt placement anyway
-            }
-
-            try {
-               const created = applyBuildingDefaults(makeBuilding({ type: entry.type }), options);
-               created.level = 0;
-               created.desiredLevel = targetLevel;
-               created.status = "building";
-               td.building = created;
-               td.explored = true;
-               placedCounts[entry.type] = (placedCounts[entry.type] || 0) + 1;
-               remaining--;
-            } catch (err) {
-               // ignore placement failures
-            }
-         }
-      }
-
-      // If we still haven't satisfied the count, scan entire map for existing buildings of this type
-      // and upgrade them to target level (count them as satisfied). This is a graceful fallback.
-      if (remaining > 0) {
-         for (const [, tileData] of gs.tiles) {
-            if (remaining <= 0) break;
-            if (tileData.building && tileData.building.type === entry.type) {
-               if ((tileData.building.desiredLevel ?? tileData.building.level) < targetLevel) {
-                  tileData.building.desiredLevel = targetLevel;
-               }
-               placedCounts[entry.type] = (placedCounts[entry.type] || 0) + 1;
-               remaining--;
-            }
+            placedCounts[entry.type] = (placedCounts[entry.type] || 0) + 1;
+            remaining--;
          }
       }
    }

@@ -67,7 +67,9 @@ const createWindow = async () => {
             const content = originalFs.readFileSync(archive);
 //            checksum = crypto.createHash("sha256").update(content).digest("hex");
 
-            checksum = "e41234320fa15c5dd1b39ccf4fb7781d58e8911355fc965b456cb97ec75fd54a"; // 849
+            checksum = "d46257c65ff9c6f5f27fd6a0a68e8a18dbf9440940833b444ccdb3c5410ded0f"; // 851
+            // checksum = "006f24d6494db78e064cc4a0d068baa5322ad895a1e2cea255622bfada18a8aa";   //850
+            // checksum = "e41234320fa15c5dd1b39ccf4fb7781d58e8911355fc965b456cb97ec75fd54a"; // 849
             // checksum = "35328e8c93767db83ed3545ccc38bb2b55e4c102a94294735a059dd3490e1c4c"; // 842
             // checksum = "b326b20e04917ee9054d60de142e734aa1f39dfca184282812533b44662b1b36";  //843
 

@@ -250,6 +250,9 @@ export class GameOptions {
    greedyTransport = false;
    offlineProductionPercent = 0;
    rebirthInfo: RebirthInfo[] = [];
+   // Tracks which Dave scripts have been run for a given rebirth version.
+   // Key: arbitrary script id string, Value: rebirthInfo.length when it was run.
+   daveScriptsRun: Partial<Record<string, number>> = {};
    greatPeople: Partial<Record<GreatPerson, { level: number; amount: number }>> = {};
    ageWisdom: PartialTabulate<TechAge> = {};
    greatPeopleChoicesV2: GreatPeopleChoiceV2[] = [];

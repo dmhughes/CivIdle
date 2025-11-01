@@ -3,6 +3,7 @@ import type { PropsWithChildren } from "react";
 import { useEffect, useRef, useState } from "react";
 import { isHalloween } from "../../../shared/definitions/TimedBuildingUnlock";
 import { DISCORD_URL, SUPPORTER_PACK_URL } from "../../../shared/logic/Constants";
+import { getGameOptions, notifyGameOptionsUpdate, watchGameOptions } from "../../../shared/logic/GameStateLogic";
 import { Tick } from "../../../shared/logic/TickLogic";
 import { isSaveOwner } from "../../../shared/utilities/DatabaseShared";
 import { isNullOrUndefined, sizeOf } from "../../../shared/utilities/Helper";
@@ -67,6 +68,11 @@ function MenuItem({ check, children }: PropsWithChildren<{ check: boolean }>): R
 }
 
 export function MenuComponent(): React.ReactNode {
+   const [gameOptions, setGameOptions] = useState(() => getGameOptions());
+   useEffect(() => {
+      const unsub = watchGameOptions((opts) => setGameOptions(opts));
+      return () => unsub();
+   }, []);
    const [active, setActive] = useState<MenuItemOptions>(null);
    const buttonRef = useRef(null);
    const user = useUser();
@@ -403,6 +409,11 @@ export function MenuComponent(): React.ReactNode {
                            if (mod && typeof mod.buildInitialMines === "function") {
                               const result = mod.buildInitialMines();
                               const houses = result.houseResult?.placed ?? 0;
+                              // mark as run for this rebirth
+                              const opts = getGameOptions();
+                              opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                              opts.daveScriptsRun.BuildInitialMines = opts.rebirthInfo?.length ?? 0;
+                              notifyGameOptionsUpdate(opts);
                               showToast(
                                  `BuildInitialMines: Houses ${houses}, Aqueducts ${result.aqueductPlaced}, Quarries ${result.stoneQuarryPlaced}, Logging ${result.loggingCampPlaced}`,
                               );
@@ -415,27 +426,68 @@ export function MenuComponent(): React.ReactNode {
                         }
                      }}
                   >
-                     <MenuItem check={false}>{"001 - Build Initial Mines"}</MenuItem>
+                     <MenuItem check={((gameOptions.daveScriptsRun?.BuildInitialMines ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"001 - Build Initial Mines"}</MenuItem>
                   </div>
                   <div
                      className="menu-popover-item"
-                     onPointerDown={() => {
+                     onPointerDown={async () => {
                         playClick();
-                        showToast("Dave's scripts are not available in this build.");
                         setActive(null);
+                        try {
+                           const mod = await import("../logic/davescripts");
+                           if (mod && typeof mod.buildApartments === "function") {
+                                 const res = await mod.buildApartments();
+                                 const matsOk = res.materials ? 'ok' : 'none';
+                                 const supportOk = res.support ? 'ok' : 'none';
+                                 const deploySummary = res.deploy ? `placed ${res.deploy.placed}/${res.deploy.requested}` : 'not run';
+                                 // mark as run for this rebirth
+                                 const opts = getGameOptions();
+                                 opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                 opts.daveScriptsRun.BuildApartments = opts.rebirthInfo?.length ?? 0;
+                                 notifyGameOptionsUpdate(opts);
+                                 // Present a compact summary in the toast
+                                 showToast(`BuildApartments: Materials ${matsOk}, Support ${supportOk}, Deploy ${deploySummary}`);
+                           } else {
+                              showToast("Dave's scripts are not available in this build.");
+                           }
+                        } catch (err) {
+                           playError();
+                           showToast(String(err));
+                        }
                      }}
                   >
-                     <MenuItem check={false}>{"002 - Build Apartments"}</MenuItem>
+                     <MenuItem check={((gameOptions.daveScriptsRun?.BuildApartments ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"002 - Build Apartments"}</MenuItem>
                   </div>
                   <div
                      className="menu-popover-item"
-                     onPointerDown={() => {
+                     onPointerDown={async () => {
                         playClick();
-                        showToast("Dave's scripts are not available in this build.");
                         setActive(null);
+                        try {
+                           const mod = await import("../logic/davescripts");
+                           if (mod && typeof mod.buildBigBenMaterials === "function") {
+                              const res = mod.buildBigBenMaterials();
+                              if (!res.results) {
+                                 showToast(`BuildBigBenMaterials: ${res.message ?? 'no tiles placed'}`);
+                                 return;
+                              }
+                              // mark as run for this rebirth
+                              const opts = getGameOptions();
+                              opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                              opts.daveScriptsRun.BuildBigBenMaterials = opts.rebirthInfo?.length ?? 0;
+                              notifyGameOptionsUpdate(opts);
+                              const summary = res.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+                              showToast(`BuildBigBenMaterials: ${summary}`);
+                           } else {
+                              showToast("Dave's scripts are not available in this build.");
+                           }
+                        } catch (err) {
+                           playError();
+                           showToast(String(err));
+                        }
                      }}
                   >
-                     <MenuItem check={false}>{"003 - Build Big Ben Materials"}</MenuItem>
+                     <MenuItem check={((gameOptions.daveScriptsRun?.BuildBigBenMaterials ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"003 - Build Big Ben Materials"}</MenuItem>
                   </div>
                   <div
                      className="menu-popover-item"

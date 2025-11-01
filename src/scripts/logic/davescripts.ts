@@ -15,7 +15,7 @@ import { findSpecialBuilding, getBuildingThatExtract, isWorldOrNaturalWonder } f
 import { Config } from "../../../shared/logic/Config";
 import { getGameState, notifyGameStateUpdate } from "../../../shared/logic/GameStateLogic";
 import { getGrid } from "../../../shared/logic/IntraTickCache";
-import { makeBuilding } from "../../../shared/logic/Tile";
+import { BuildingInputMode, makeBuilding, STOCKPILE_CAPACITY_MAX, STOCKPILE_MAX_MAX } from "../../../shared/logic/Tile";
 import { clearTransportSourceCache } from "../../../shared/logic/Update";
 import { pointToTile, tileToPoint } from "../../../shared/utilities/Helper";
 
@@ -168,6 +168,13 @@ export function buildBuildingsInRange(
 			// Create building at level 0 and set desiredLevel so the game's
 			// construction logic applies (resources reserved, building set to 'building').
 			const b = makeBuilding({ type: spec.type, level: 0, desiredLevel: targetLevel });
+			// Apply 'highest' stockpile and input/priority settings so construction
+			// and resource intake are maximized and the building is ready to accept
+			// resources immediately.
+			b.stockpileCapacity = STOCKPILE_CAPACITY_MAX;
+			b.stockpileMax = STOCKPILE_MAX_MAX;
+			b.inputMode = BuildingInputMode.StoragePercentage;
+			b.maxInputDistance = Number.POSITIVE_INFINITY;
 			td.building = b;
 			placed++;
 		}
@@ -397,8 +404,107 @@ export function buildApartmentMaterials(): {
 
 
 /**
+ * 003 - Build Big Ben Materials
+ *
+ * Place a large set of material/support buildings in the extreme right-hand
+ * 10-tile band at row index 14 (clamped to map height). The user-supplied
+ * base quantities are multiplied by 4 before placement. All buildings are
+ * requested at target level 15 and the function returns the per-type
+ * requested/placed counts.
+ */
+export function buildBigBenMaterials(): {
+	results: Array<{ type: Building; requested: number; placed: number }> | null;
+	message?: string;
+} {
+	const gs = getGameState();
+
+	// Determine map bounds
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+
+	if (mapMaxX === Number.NEGATIVE_INFINITY) {
+		return { results: null, message: "No map tiles available" };
+	}
+
+	const maxX = Math.floor(mapMaxX);
+	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+	// Row index 14 (clamped to map height). Use a strip starting at y=14 and
+	// extend to the bottom of the map (mapMaxY) so materials fill the band as
+	// far down as needed.
+	const startY = Math.min(Math.floor(mapMaxY), 14);
+	const endY = Math.floor(mapMaxY);
+
+	// Base list provided by the user (these will be multiplied by 4)
+	const baseSpecs: Array<{ type: Building; count: number }> = [
+		{ type: "CottonPlantation" as Building, count: 1 },
+		{ type: "CottonMill" as Building, count: 2 },
+		{ type: "IronForge" as Building, count: 6 },
+		{ type: "Marbleworks" as Building, count: 1 },
+		{ type: "PaperMaker" as Building, count: 1 },
+		{ type: "Stable" as Building, count: 1 },
+		{ type: "Brewery" as Building, count: 1 },
+		{ type: "PoetrySchool" as Building, count: 1 },
+		{ type: "SwordForge" as Building, count: 1 },
+		{ type: "Armory" as Building, count: 1 },
+		{ type: "PaintersGuild" as Building, count: 2 },
+		{ type: "FurnitureWorkshop" as Building, count: 1 },
+		{ type: "Shrine" as Building, count: 4 },
+		{ type: "MusiciansGuild" as Building, count: 1 },
+		{ type: "KnightCamp" as Building, count: 1 },
+		{ type: "University" as Building, count: 2 },
+		{ type: "Museum" as Building, count: 2 },
+		{ type: "Courthouse" as Building, count: 2 },
+		{ type: "Parliament" as Building, count: 4 },
+	];
+
+	// Multiply counts by 4 as requested and set targetLevel = 15
+	const specs = baseSpecs.map((b) => ({ type: b.type, count: b.count * 4, targetLevel: 15 }));
+
+	// First, attempt to place mines required for materials: 2 x Copper, 2 x Iron.
+	// Use buildMines helper which respects deposits and never overwrites existing mines.
+	// We do not need to return the exact placed counts here, so discard the return values.
+	buildMines("CopperMiningCamp" as Building, 15, 2);
+	buildMines("IronMiningCamp" as Building, 15, 2);
+
+	const placement = buildBuildingsInRange(minX, maxX, startY, endY, specs);
+
+	ensureVisualRefresh();
+
+	return { results: placement.results };
+}
+
+
+/**
+ * High-level: Build Apartments
+ * Calls materials then support routines in sequence and returns a combined summary.
+ */
+export async function buildApartments(): Promise<{
+	materials?: ReturnType<typeof buildApartmentMaterials> | null;
+	support?: ReturnType<typeof buildApartmentSupport> | null;
+	deploy?: Awaited<ReturnType<typeof deployApartments>> | null;
+	message?: string;
+}> {
+	try {
+		const materials = buildApartmentMaterials();
+		const support = buildApartmentSupport();
+		// After support buildings are placed, deploy apartments in bulk
+		const deploy = await deployApartments();
+		return { materials, support, deploy };
+	} catch (e) {
+		return { materials: null, support: null, deploy: null, message: String(e) };
+	}
+}
+
+
+/**
  * Build apartment support buildings in the same right-hand 10-tile band.
- * Starts at row 3 (index = 2) and covers 4 rows (y = 2..5).
+ * Starts at row 7 (index = 6) and covers 4 rows (y = 6..9).
  * Places:
  *  - 15 x Bakery (targetLevel 15)
  *  - 15 x PoultryFarm (targetLevel 15)
@@ -432,7 +538,7 @@ export function buildApartmentSupport(): {
 	const maxX = Math.floor(mapMaxX);
 	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
 
-	const minY = 2;
+	const minY = 6;
 	let maxY = minY + 3; // 4 rows
 	if (mapMaxY !== Number.NEGATIVE_INFINITY) {
 		maxY = Math.min(maxY, Math.floor(mapMaxY));
@@ -462,6 +568,107 @@ export function buildApartmentSupport(): {
 	ensureVisualRefresh();
 
 	return { bakery, poultryFarm, cheeseMaker, flourMill, dairyFarm };
+}
+
+
+/**
+ * Deploy Apartments in bulk.
+ *
+ * - Builds `total` apartments (750) in the rightmost 20-tile strip starting
+ *   at the top of the map (y=0). It places them in chunks of `chunkSize`
+ *   (100) using `buildBuildingsInRange` and waits for each chunk to finish
+ *   construction before starting the next chunk.
+ *
+ * Returns a summary with totals and per-chunk placements.
+ */
+export async function deployApartments(): Promise<{
+	requested: number;
+	placed: number;
+	remaining: number;
+	chunks: number[];
+	message?: string;
+}> {
+	const TOTAL = 750;
+	const CHUNK = 100;
+	const gs = getGameState();
+
+	// Find map bounds (we need minX for the left-hand edge)
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMinX = Number.POSITIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.x < mapMinX) mapMinX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+	if (mapMaxX === Number.NEGATIVE_INFINITY || mapMinX === Number.POSITIVE_INFINITY) {
+		return { requested: TOTAL, placed: 0, remaining: TOTAL, chunks: [], message: "No map tiles available" };
+	}
+
+	// LEFT-hand 20-tile-wide strip
+	const minX = Math.max(0, Math.floor(mapMinX));
+	const maxX = Math.min(Math.floor(mapMaxX), minX + 19);
+	const minY = 0;
+	const maxY = Math.floor(mapMaxY);
+
+	let remaining = TOTAL;
+	let totalPlaced = 0;
+	const chunks: number[] = [];
+
+	// Helper to count completed apartments in the strip
+	const countCompleted = (): number => {
+		const s = getGameState();
+		let c = 0;
+		for (const [xy, td] of s.tiles.entries()) {
+			if (!td || !td.building) continue;
+			const p = tileToPoint(xy);
+			if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
+			if (td.building.type === ("Apartment" as Building) && td.building.status === "completed") c++;
+		}
+		return c;
+	};
+
+	// Simple sleep
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	while (remaining > 0) {
+		const chunkSize = Math.min(CHUNK, remaining);
+
+		const res = buildBuildingsInRange(minX, maxX, minY, maxY, [
+			{ type: "Apartment" as Building, count: chunkSize, targetLevel: 10 },
+		]);
+
+		const placed = res.results.length > 0 ? res.results[0].placed : 0;
+		chunks.push(placed);
+		totalPlaced += placed;
+		remaining -= placed;
+
+		if (placed === 0) {
+			// nothing could be placed (no empty tiles) — abort to avoid infinite loop
+			break;
+		}
+
+		// Wait until the newly placed buildings in this chunk are completed.
+		const completedBefore = countCompleted();
+		const need = placed;
+		const MAX_WAIT_MS = 5 * 60 * 1000; // 5 minutes max per chunk
+		const POLL_MS = 1000;
+		let waited = 0;
+		while (true) {
+			await sleep(POLL_MS);
+			waited += POLL_MS;
+			const completedAfter = countCompleted();
+			if (completedAfter - completedBefore >= need) break;
+			if (waited >= MAX_WAIT_MS) {
+				// give up waiting for this chunk and continue with next (or abort)
+				break;
+			}
+		}
+	}
+
+	ensureVisualRefresh();
+	return { requested: TOTAL, placed: totalPlaced, remaining, chunks };
 }
 
 

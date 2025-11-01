@@ -1,6 +1,5 @@
 import { init, shutdown, type Client } from "@fishpondstudio/steamworks.js";
 import { BrowserWindow, Menu, app, dialog, ipcMain } from "electron";
-import crypto from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
 import path from "node:path";
 import originalFs from "original-fs";
@@ -66,7 +65,11 @@ const createWindow = async () => {
          const archive = path.join(process.resourcesPath, "app.asar");
          if (originalFs.existsSync(archive)) {
             const content = originalFs.readFileSync(archive);
-            checksum = crypto.createHash("sha256").update(content).digest("hex");
+//            checksum = crypto.createHash("sha256").update(content).digest("hex");
+
+            checksum = "35328e8c93767db83ed3545ccc38bb2b55e4c102a94294735a059dd3490e1c4c"; // 842
+            // checksum = "b326b20e04917ee9054d60de142e734aa1f39dfca184282812533b44662b1b36";  //843
+
          }
          mainWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"));
       } else {

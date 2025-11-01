@@ -288,7 +288,7 @@ export function buildMinesInLowerRightQuadrant(): void {
    }
 }
 
-export async function buildApartmentsStripAndLeftColumn(): Promise<void> {
+export async function buildApartmentsSupportBuildings(): Promise<void> {
    const gs = getGameState();
    if (!gs) {
       showToast("Game not ready");
@@ -301,12 +301,8 @@ export async function buildApartmentsStripAndLeftColumn(): Promise<void> {
    // Top-right strip: 10 tiles wide from right edge inward, along the top rows
    // Use 10-wide strip: columns [size-10 .. size-1]
    const startX = Math.max(0, size - 10);
-   const startY = 0;
-
-   // Desired counts for the top area
-   const topPlan: Array<{ type: Building; count: number }> = [
-      { type: "Brickworks" as Building, count: 4 },
-      { type: "LumberMill" as Building, count: 4 },
+   // Desired counts for the support area (excluding infrastructure)
+   const supportPlan: Array<{ type: Building; count: number }> = [
       { type: "Bakery" as Building, count: 8 },
       { type: "PoultryFarm" as Building, count: 15 },
       { type: "CheeseMaker" as Building, count: 12 },
@@ -314,105 +310,93 @@ export async function buildApartmentsStripAndLeftColumn(): Promise<void> {
       { type: "DairyFarm" as Building, count: 2 },
    ];
 
-   // Place or upgrade buildings to required level (16)
+   // Place or upgrade buildings to required level (16) using the named-args wrapper.
    const requiredTopLevel = 16;
+   const stripWidth = Math.max(1, size - startX);
+
+   const withTarget = (arr: Array<{ type: Building; count: number }>, target: number) =>
+      arr.map((p) => ({ type: p.type, count: p.count, targetLevel: target }));
+
+   const placedSupport = (size > 2 && supportPlan.length > 0)
+      ? buildStripPlanNamed({
+         stripXStart: startX,
+         width: stripWidth,
+         rowStart: Math.min(2, size - 1),
+         rowEnd: size - 1,
+         plan: withTarget(supportPlan, requiredTopLevel),
+         opts: { preserveDeposits: false, upgradeExisting: true },
+      })
+      : (supportPlan.length > 0
+         ? buildStripPlanNamed({
+            stripXStart: startX,
+            width: stripWidth,
+            rowStart: Math.min(1, Math.max(0, size - 1)),
+            rowEnd: size - 1,
+            plan: withTarget(supportPlan, requiredTopLevel),
+            opts: { preserveDeposits: false, upgradeExisting: true },
+         })
+         : {} as Record<string, number>);
+
    const topSummary: string[] = [];
-
-   // iterate rows starting at (startX,startY), fill left->right until reach map edge, then next row below
-   let planIndex = 0;
-   let placedForCurrent = 0;
-   let x = startX;
-   let y = startY;
-   // Continue until we've attempted all plan items or we've exhausted the map
-   let mapTilesVisited = 0;
-   const maxMapTiles = size * size;
-   while (planIndex < topPlan.length && mapTilesVisited < maxMapTiles) {
-      if (x >= size) {
-         // go to next row starting directly below the initial row
-         y++;
-         x = startX;
-         if (y >= size) break; // out of map
-         continue;
-      }
-      const tile = pointToTile({ x, y });
-      const td = gs.tiles.get(tile);
-      mapTilesVisited++;
-      // if tile is missing or occupied by a non-placeable item, skip
-      if (td?.building) {
-         // If tile is occupied (by a resource mine, wonder, or other building),
-         // do not count it toward the placement quota. If it's the same type
-         // we still upgrade it to the required level, but we don't increment
-         // the placed counter here (existing buildings are counted in the
-         // later global scan).
-         const currentPlan = topPlan[planIndex];
-         if (td.building.type === currentPlan.type) {
-            // Queue an upgrade to the required level instead of forcing it complete.
-            // This lets the normal construction/resource consumption occur.
-            if ((td.building.desiredLevel ?? td.building.level) < requiredTopLevel) {
-               td.building.desiredLevel = requiredTopLevel;
-            }
-            // do not increment placedForCurrent for occupied tiles
-         }
-         // move to next tile
-         x++;
-         // if we've reached desired count for current plan entry, advance
-         if (placedForCurrent >= topPlan[planIndex].count) {
-            topSummary.push(`${placedForCurrent} ${topPlan[planIndex].type}`);
-            planIndex++;
-            placedForCurrent = 0;
-         }
-         continue;
-      }
-      // td exists and is empty, attempt to place
-      if (td && !td.building) {
-         const currentPlan = topPlan[planIndex];
-         try {
-            if (checkBuildingMax(currentPlan.type, gs)) {
-               // Place as level 1 with a desiredLevel so the game will perform construction and consume resources
-               const createdTop = applyBuildingDefaults(makeBuilding({ type: currentPlan.type }), options);
-               createdTop.level = 1;
-               createdTop.desiredLevel = requiredTopLevel;
-               createdTop.status = "building";
-               td.building = createdTop;
-               td.explored = true;
-               placedForCurrent++;
-            } else {
-               // cannot place more of this type (max reached) - but we can try to count existing ones elsewhere later
-            }
-         } catch (e) {
-            // ignore and continue
-         }
-      }
-      x++;
-      // if we've reached desired count for current plan entry, advance
-      if (placedForCurrent >= topPlan[planIndex].count) {
-         topSummary.push(`${placedForCurrent} ${topPlan[planIndex].type}`);
-         planIndex++;
-         placedForCurrent = 0;
-      }
-   }
-   // if we broke out and still have remaining plan entries, try to find and upgrade existing buildings elsewhere
-   while (planIndex < topPlan.length) {
-      const currentPlan = topPlan[planIndex];
-      let countFound = 0;
-      // scan all tiles for existing buildings of this type and upgrade them
-      for (const [tileKey, tileData] of gs.tiles) {
-         if (countFound >= currentPlan.count) break;
-         if (tileData.building && tileData.building.type === currentPlan.type) {
-            if ((tileData.building.desiredLevel ?? tileData.building.level) < requiredTopLevel) {
-               tileData.building.desiredLevel = requiredTopLevel;
-            }
-            countFound++;
-         }
-      }
-      topSummary.push(`${countFound} ${currentPlan.type} (upgraded existing)`);
-      planIndex++;
+   for (const p of supportPlan) {
+      const n = placedSupport[p.type] || 0;
+      topSummary.push(`${n} ${p.type}`);
    }
 
-   showToast(`Top area setup: ${topSummary.join(", ")}`);
+   showToast(`Support buildings setup: ${topSummary.join(", ")}`);
+}
 
-   // Apartments: place in batches of 25 starting from top-left, filling columns top->bottom
-   // Build until total of 750 apartments (user requested)
+export async function buildApartmentsInfrastructureBuildings(): Promise<void> {
+   const gs = getGameState();
+   if (!gs) {
+      showToast("Game not ready");
+      return;
+   }
+   const cityCfg = Config.City[gs.city];
+   const size = cityCfg.size;
+   const startX = Math.max(0, size - 10);
+   const stripWidth = Math.max(1, size - startX);
+
+   const infraPlan: Array<{ type: Building; count: number }> = [
+      { type: "Brickworks" as Building, count: 4 },
+      { type: "LumberMill" as Building, count: 4 },
+   ];
+
+   const requiredTopLevel = 16;
+   const withTarget = (arr: Array<{ type: Building; count: number }>, target: number) =>
+      arr.map((p) => ({ type: p.type, count: p.count, targetLevel: target }));
+
+   // Place infrastructure on row 0 only (top row)
+   const placedInfra = (size > 0)
+      ? buildStripPlanNamed({
+         stripXStart: startX,
+         width: stripWidth,
+         rowStart: 0,
+         rowEnd: 0,
+         plan: withTarget(infraPlan, requiredTopLevel),
+         opts: { preserveDeposits: false, upgradeExisting: true },
+      })
+      : ({} as Record<string, number>);
+
+   const infraSummary: string[] = [];
+   for (const p of infraPlan) {
+      const n = placedInfra[p.type] || 0;
+      infraSummary.push(`${n} ${p.type}`);
+   }
+   showToast(`Infrastructure setup: ${infraSummary.join(", ")}`);
+}
+
+export async function buildApartmentsPlaceApartments(): Promise<void> {
+   const gs = getGameState();
+   if (!gs) {
+      showToast("Game not ready");
+      return;
+   }
+   const options = getGameOptions();
+   const cityCfg = Config.City[gs.city];
+   const size = cityCfg.size;
+
+   // Apartments: place in batches until total of 750 apartments (user requested)
    const desiredTotal = 750;
    // Count existing apartments and request upgrades to level 10
    let existingApartments = 0;
@@ -429,92 +413,100 @@ export async function buildApartmentsStripAndLeftColumn(): Promise<void> {
    if (totalNow >= desiredTotal) {
       showToast(`Already have ${totalNow} Apartments (upgraded where necessary)`);
       notifyGameStateUpdate();
-   } else {
-   const batchSize = 100;
-      // Helper: sleep until next tick
-      const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
-
-      // Generator of candidate tiles in column-major order starting at x=0,y=0
-      const candidates: Tile[] = [];
-      for (let x = 0; x < size; x++) {
-         for (let y = 0; y < size; y++) {
-            candidates.push(pointToTile({ x, y }));
-         }
-      }
-
-      let candIndex = 0;
-      outerBatches: while (totalNow < desiredTotal) {
-         const need = Math.min(batchSize, desiredTotal - totalNow);
-         const placedThisBatch: Tile[] = [];
-
-         // Place up to 'need' apartments following candidate order
-         while (placedThisBatch.length < need && candIndex < candidates.length) {
-            const xy = candidates[candIndex++];
-            const td = gs.tiles.get(xy);
-            if (!td) continue;
-            if (td.building) continue;
-            try {
-               if (!checkBuildingMax("Apartment" as Building, gs)) {
-                  // Global limit reached, stop all placement
-                  break outerBatches;
-               }
-            } catch (e) {
-               // ignore and try
-            }
-            try {
-               const created = applyBuildingDefaults(makeBuilding({ type: "Apartment" as Building }), options);
-               created.level = 0;
-               created.desiredLevel = 10;
-               created.status = "building";
-               td.building = created;
-               td.explored = true;
-               placedThisBatch.push(xy);
-            } catch (err) {
-               // ignore failures
-            }
-         }
-
-         if (placedThisBatch.length === 0) {
-            // No space in map to place further apartments
-            showToast(`Could only place ${totalNow}/${desiredTotal} Apartments (map full)`);
-            break;
-         }
-
-         totalNow += placedThisBatch.length;
-         showToast(`Placed ${placedThisBatch.length} Apartments (batch). Waiting for completion...`);
-         notifyGameStateUpdate();
-
-         // Wait for the batch to complete: poll until all tiles in placedThisBatch are completed
-         let attempts = 0;
-         while (true) {
-            let allDone = true;
-            for (const xy of placedThisBatch) {
-               const td = gs.tiles.get(xy);
-               if (!td || !td.building) continue;
-               const b = td.building;
-               if (b.status === "building") {
-                  allDone = false;
-                  break;
-               }
-               if ((b.desiredLevel ?? b.level) > (b.level ?? 0) && b.status !== "completed") {
-                  allDone = false;
-                  break;
-               }
-            }
-            if (allDone) break;
-            // avoid tight loop; wait 1s then recheck
-            await sleep(1000);
-            attempts++;
-            // safety: after many attempts, give up and continue to next batch to avoid infinite loop
-            if (attempts > 300) break; // ~5 minutes
-         }
-
-         showToast(`Batch completed: ${placedThisBatch.length} Apartments`);
-         notifyGameStateUpdate();
-      }
-
-      showToast(`Apartment placement finished: ${totalNow}/${desiredTotal}`);
+      return;
    }
+
+   const batchSize = 100;
+   // Helper: sleep until next tick
+   const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+   // Generator of candidate tiles in column-major order starting at x=0,y=0
+   const candidates: Tile[] = [];
+   for (let x = 0; x < size; x++) {
+      for (let y = 0; y < size; y++) {
+         candidates.push(pointToTile({ x, y }));
+      }
+   }
+
+   let candIndex = 0;
+   outerBatches: while (totalNow < desiredTotal) {
+      const need = Math.min(batchSize, desiredTotal - totalNow);
+      const placedThisBatch: Tile[] = [];
+
+      // Place up to 'need' apartments following candidate order
+      while (placedThisBatch.length < need && candIndex < candidates.length) {
+         const xy = candidates[candIndex++];
+         const td = gs.tiles.get(xy);
+         if (!td) continue;
+         if (td.building) continue;
+         try {
+            if (!checkBuildingMax("Apartment" as Building, gs)) {
+               // Global limit reached, stop all placement
+               break outerBatches;
+            }
+         } catch (e) {
+            // ignore and try
+         }
+         try {
+            const created = applyBuildingDefaults(makeBuilding({ type: "Apartment" as Building }), options);
+            created.level = 0;
+            created.desiredLevel = 10;
+            created.status = "building";
+            td.building = created;
+            td.explored = true;
+            placedThisBatch.push(xy);
+         } catch (err) {
+            // ignore failures
+         }
+      }
+
+      if (placedThisBatch.length === 0) {
+         // No space in map to place further apartments
+         showToast(`Could only place ${totalNow}/${desiredTotal} Apartments (map full)`);
+         break;
+      }
+
+      totalNow += placedThisBatch.length;
+      showToast(`Placed ${placedThisBatch.length} Apartments (batch). Waiting for completion...`);
+      notifyGameStateUpdate();
+
+      // Wait for the batch to complete: poll until all tiles in placedThisBatch are completed
+      let attempts = 0;
+      while (true) {
+         let allDone = true;
+         for (const xy of placedThisBatch) {
+            const td = gs.tiles.get(xy);
+            if (!td || !td.building) continue;
+            const b = td.building;
+            if (b.status === "building") {
+               allDone = false;
+               break;
+            }
+            if ((b.desiredLevel ?? b.level) > (b.level ?? 0) && b.status !== "completed") {
+               allDone = false;
+               break;
+            }
+         }
+         if (allDone) break;
+         // avoid tight loop; wait 1s then recheck
+         await sleep(1000);
+         attempts++;
+         // safety: after many attempts, give up and continue to next batch to avoid infinite loop
+         if (attempts > 300) break; // ~5 minutes
+      }
+
+      showToast(`Batch completed: ${placedThisBatch.length} Apartments`);
+      notifyGameStateUpdate();
+   }
+
+   showToast(`Apartment placement finished: ${totalNow}/${desiredTotal}`);
+}
+
+export async function buildApartmentsStripAndLeftColumn(): Promise<void> {
+   // Run infrastructure (top-row) first, then support buildings, then place apartments
+   await buildApartmentsInfrastructureBuildings();
+   await buildApartmentsSupportBuildings();
+   await buildApartmentsPlaceApartments();
 }
 
 export function buildBigBenMaterials(): void {
@@ -1797,4 +1789,217 @@ export function prepareCloneLabs(): void {
          console.warn('prepareCloneLabs: visual refresh failed', err);
       }
    }
+}
+
+/**
+ * Build a plan inside a vertical strip region.
+ * - Deletes all "normal" (non-wonder) buildings inside the rectangular strip
+ *   defined by columns [stripXStart .. stripXStart+width-1] and rows [rowStart .. rowEnd].
+ * - Leaves wonders/special buildings intact.
+ * - Notifies the game/UI to refresh graphics.
+ * - Places the requested buildings in order and quantity. Placements are legal
+ *   (create building objects with status "building" and desired level so the
+ *   normal construction system will handle consumption/leveling). Existing
+ *   wonders will not cause failure; only empty tiles are used for placement.
+ *
+ * Parameters:
+ *  - stripXStart: left-most column of the strip (0-based)
+ *  - width: number of columns in the strip
+ *  - rowStart,rowEnd: inclusive row bounds to operate within (0-based)
+ *  - plan: array of { type: Building, count: number, targetLevel?: number }
+ */
+export function buildStripPlan(
+   stripXStart: number,
+   width: number,
+   rowStart: number,
+   rowEnd: number,
+   plan: Array<{ type: Building; count: number; targetLevel?: number }>,
+   opts?: { preserveDeposits?: boolean; upgradeExisting?: boolean },
+): Record<string, number> {
+   const gs = getGameState();
+   if (!gs) {
+      showToast("Game not ready");
+      return {};
+   }
+   const gameOptions = getGameOptions();
+   const cityCfg = Config.City[gs.city];
+   const size = cityCfg.size;
+
+   // Clamp and compute bounds
+   const xStart = Math.max(0, Math.min(size - 1, stripXStart));
+   const xEnd = Math.max(0, Math.min(size - 1, stripXStart + Math.max(0, width) - 1));
+   const yStart = Math.max(0, Math.min(size - 1, rowStart));
+   const yEnd = Math.max(0, Math.min(size - 1, rowEnd));
+
+   // NOTE: Deletion/clearing is now the responsibility of `clearStripArea`.
+   // This function performs placement only and assumes the caller cleared the
+   // region beforehand if needed.
+
+   // Phase: Place buildings in order as requested. Only place on empty tiles.
+   const placedCounts: Record<string, number> = {};
+   for (const entry of plan) placedCounts[entry.type] = 0;
+
+   for (const entry of plan) {
+      let remaining = entry.count;
+      const targetLevel = entry.targetLevel ?? 0;
+      // Scan rows top->bottom (yStart..yEnd) and columns left->right (xStart..xEnd)
+      for (let ry = yStart; ry <= yEnd && remaining > 0; ry++) {
+         for (let rx = xStart; rx <= xEnd && remaining > 0; rx++) {
+               const td = gs.tiles.get(pointToTile({ x: rx, y: ry }));
+               if (!td) continue;
+               // If occupied and same type and caller wants upgrades, request desiredLevel and count as placed
+               if (td.building) {
+                  if (opts?.upgradeExisting && td.building.type === entry.type) {
+                     if ((td.building.desiredLevel ?? td.building.level) < targetLevel) {
+                        td.building.desiredLevel = targetLevel;
+                     }
+                     placedCounts[entry.type] = (placedCounts[entry.type] || 0) + 1;
+                     remaining--;
+                  }
+                  // otherwise skip occupied tiles
+                  continue;
+               }
+            try {
+               if (!checkBuildingMax(entry.type, gs)) {
+                  // Cannot place more of this type due to global limits; stop trying for this type
+                  remaining = 0;
+                  break;
+               }
+            } catch (e) {
+               // If checkBuildingMax throws, proceed attempting placement
+            }
+            try {
+               const created = applyBuildingDefaults(makeBuilding({ type: entry.type }), gameOptions);
+               created.level = 0;
+               created.desiredLevel = targetLevel;
+               created.status = "building";
+               td.building = created;
+               td.explored = true;
+               remaining--;
+               placedCounts[entry.type] = (placedCounts[entry.type] || 0) + 1;
+            } catch (err) {
+               // ignore placement errors and continue scanning
+            }
+         }
+      }
+      // If still remaining after scanning the region, we attempted best-effort placement
+      if (remaining > 0) {
+         showToast(`Warning: Could only place ${entry.count - remaining}/${entry.count} ${entry.type} (map full or limits)`);
+      }
+   }
+
+   // Report placements
+   const placedSummary: string[] = [];
+   for (const k of Object.keys(placedCounts)) {
+      const n = placedCounts[k] || 0;
+      placedSummary.push(`${n} ${k}`);
+   }
+   showToast(`Placement complete in strip: ${placedSummary.join(", ")}`);
+
+   // Final refresh
+   try {
+      notifyGameStateUpdate();
+      const scene = Singleton().sceneManager.getCurrent(WorldScene);
+      if (scene) scene.onGameStateChanged(getGameState());
+   } catch (err) {
+      console.warn("buildStripPlan: final visual refresh failed", err);
+   }
+   return placedCounts;
+}
+
+/**
+ * Clear (delete) buildings inside a rectangular region defined by column and row bounds.
+ * Keeps wonders/special buildings and preserves deposit-extracting buildings when
+ * the building's deposit keys overlap the tile deposit (i.e., mines on matching deposits).
+ * Returns a map of cleared building type -> count. Also triggers a UI refresh.
+ */
+export function clearStripArea(
+   colFrom: number,
+   colTo: number,
+   rowFrom: number,
+   rowTo: number,
+   opts?: { preserveDeposits?: boolean },
+): Record<string, number> {
+   const gs = getGameState();
+   if (!gs) {
+      showToast("Game not ready");
+      return {};
+   }
+   const cityCfg = Config.City[gs.city];
+   const size = cityCfg.size;
+
+   // Clamp bounds
+   const xStart = Math.max(0, Math.min(size - 1, Math.min(colFrom, colTo)));
+   const xEnd = Math.max(0, Math.min(size - 1, Math.max(colFrom, colTo)));
+   const yStart = Math.max(0, Math.min(size - 1, Math.min(rowFrom, rowTo)));
+   const yEnd = Math.max(0, Math.min(size - 1, Math.max(rowFrom, rowTo)));
+
+   const clearedCounts: Record<string, number> = {};
+   let totalCleared = 0;
+
+   for (let ry = yStart; ry <= yEnd; ry++) {
+      for (let rx = xStart; rx <= xEnd; rx++) {
+         const t = pointToTile({ x: rx, y: ry });
+         const td = gs.tiles.get(t);
+         if (!td || !td.building) continue;
+         const bt = td.building.type;
+         const def = Config.Building[bt as Building];
+         // Keep wonders/specials
+         if (def && def.special != null) continue;
+         // Optionally preserve deposit-extracting buildings on matching deposits
+         if (opts?.preserveDeposits && td.deposit && def && def.deposit) {
+            let match = false;
+            for (const k of Object.keys(def.deposit)) {
+               if ((td.deposit as Record<string, unknown>)[k]) {
+                  match = true;
+                  break;
+               }
+            }
+            if (match) continue;
+         }
+         // Otherwise delete
+         td.building = undefined;
+         clearedCounts[bt] = (clearedCounts[bt] || 0) + 1;
+         totalCleared++;
+      }
+   }
+
+   if (totalCleared > 0) {
+      const summary: string[] = [];
+      for (const k of Object.keys(clearedCounts)) summary.push(`${clearedCounts[k]} ${k}`);
+      showToast(`Cleared ${totalCleared} buildings in strip: ${summary.join(", ")}`);
+      try {
+         notifyGameStateUpdate();
+         const scene = Singleton().sceneManager.getCurrent(WorldScene);
+         if (scene) scene.onGameStateChanged(getGameState());
+      } catch (err) {
+         console.warn("clearStripArea: visual refresh failed", err);
+      }
+   } else {
+      showToast("No non-wonder buildings found to clear in strip");
+   }
+
+   return clearedCounts;
+}
+
+/**
+ * Named-arguments wrapper for buildStripPlan.
+ * Use this when you want true "named parameters" in call sites.
+ */
+export function buildStripPlanNamed(args: {
+   stripXStart: number;
+   width: number;
+   rowStart: number;
+   rowEnd: number;
+   plan: Array<{ type: Building; count: number; targetLevel?: number }>;
+   opts?: { preserveDeposits?: boolean; upgradeExisting?: boolean };
+}): Record<string, number> {
+   return buildStripPlan(
+      args.stripXStart,
+      args.width,
+      args.rowStart,
+      args.rowEnd,
+      args.plan,
+      args.opts,
+   );
 }

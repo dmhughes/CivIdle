@@ -520,23 +520,58 @@ export function MenuComponent(): React.ReactNode {
                   {/* 004 was removed to keep the list contiguous */}
                   <div
                      className="menu-popover-item"
-                     onPointerDown={() => {
+                     onPointerDown={async () => {
                         playClick();
-                        showToast("Dave's scripts are not available in this build.");
                         setActive(null);
+                        try {
+                           const mod = await import("../logic/davescripts");
+                           if (mod && typeof mod.replaceApartmentsWithCondos === "function") {
+                              const res = await mod.replaceApartmentsWithCondos();
+                              // mark as run for this rebirth
+                              const opts = getGameOptions();
+                              opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                              opts.daveScriptsRun.ReplaceApartmentsWithCondos = opts.rebirthInfo?.length ?? 0;
+                              notifyGameOptionsUpdate(opts);
+                              showToast(
+                                 `ReplaceApartmentsWithCondos: removed ${res.removedApartments}, placed ${res.placed}/${res.requested}`,
+                              );
+                           } else {
+                              showToast("Dave's scripts are not available in this build.");
+                           }
+                        } catch (err) {
+                           playError();
+                           showToast(String(err));
+                        }
                      }}
                   >
-                     <MenuItem check={false}>{"005 - Replace Apartments with Condos"}</MenuItem>
+                     <MenuItem check={((gameOptions.daveScriptsRun?.ReplaceApartmentsWithCondos ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"005 - Replace Apartments with Condos"}</MenuItem>
                   </div>
                   <div
                      className="menu-popover-item"
-                     onPointerDown={() => {
+                     onPointerDown={async () => {
                         playClick();
-                        showToast("Dave's scripts are not available in this build.");
                         setActive(null);
+                        try {
+                           const mod = await import("../logic/davescripts");
+                           if (mod && typeof mod.prepareCnTowerMaterials === "function") {
+                              const res = mod.prepareCnTowerMaterials();
+                              const opts = getGameOptions();
+                              opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                              opts.daveScriptsRun.PrepareCnTowerMaterial = opts.rebirthInfo?.length ?? 0;
+                              notifyGameOptionsUpdate(opts);
+                              const top = res.nonElectPlacement ? res.nonElectPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              const bottom = res.electPlacement ? res.electPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              showToast(`PrepareCN: cleared ${res.cleared?.cleared ?? 0}; non-elect: ${top}; elect: ${bottom}`);
+                           } else {
+                              showToast("Dave's scripts are not available in this build.");
+                           }
+                        } catch (err) {
+                           playError();
+                           showToast(String(err));
+                        }
                      }}
                   >
-                     <MenuItem check={false}>{"006 - Prepare CN Tower Material"}</MenuItem>
+                     <MenuItem check={((gameOptions.daveScriptsRun?.PrepareCnTowerMaterial ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"006 - Prepare CN Tower Material"}</MenuItem>
                   </div>
                   <div
                      className="menu-popover-item"

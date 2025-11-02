@@ -896,5 +896,119 @@ export async function replaceApartmentsWithCondos(): Promise<{
 }
 
 
+/**
+ * 006 - Prepare CN Tower Material
+ *
+ * Steps:
+ * - Use the rightmost 10-tile band as the target strip.
+ * - Clear rows 7..10 (indexes 6..9) in that strip using clearRange.
+ * - From the provided CN tower building list, split into non-electrified and electrified
+ *   groups using `canBeElectrified`.
+ * - Place non-electrified buildings into rows 7..13 (indexes 6..12) using buildBuildingsInRange.
+ * - Place electrified buildings starting at row 25 (index 24) downwards; ensure a CoalPowerPlant
+ *   is placed at the start of the electrified block to provide power.
+ */
+export function prepareCnTowerMaterials(): {
+	nonElectPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+	cleared: { cleared: number; preservedWonders: number; preservedMines: number } | null;
+	electPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+	message?: string;
+} {
+	const gs = getGameState();
+
+	// CN Tower building list (name -> count). The fourth arg in the user's list is the quantity.
+	const cnList: Array<{ type: Building; count: number }> = [
+		{ type: "Glassworks" as Building, count: 1 },
+		{ type: "GarmentWorkshop" as Building, count: 1 },
+		{ type: "LensWorkshop" as Building, count: 1 },
+		{ type: "PrintingHouse" as Building, count: 1 },
+		{ type: "ActorsGuild" as Building, count: 1 },
+		{ type: "PublishingHouse" as Building, count: 4 },
+		{ type: "Stadium" as Building, count: 2 },
+		{ type: "MovieStudio" as Building, count: 5 },
+		{ type: "CoalPowerPlant" as Building, count: 1 },
+		{ type: "MagazinePublisher" as Building, count: 4 },
+		{ type: "Embassy" as Building, count: 4 },
+		{ type: "RadioStation" as Building, count: 8 },
+		{ type: "MusiciansGuild" as Building, count: 2 },
+		{ type: "PoetrySchool" as Building, count: 2 },
+		{ type: "Brewery" as Building, count: 1 },
+		{ type: "PaperMaker" as Building, count: 1 },
+		{ type: "Sandpit" as Building, count: 1 },
+		{ type: "University" as Building, count: 4 },
+		{ type: "ActorsGuild" as Building, count: 1 },
+		{ type: "CottonMill" as Building, count: 1 },
+		{ type: "CoalPowerPlant" as Building, count: 1 },
+		{ type: "PaintersGuild" as Building, count: 1 },
+		{ type: "Museum" as Building, count: 3 },
+		{ type: "Courthouse" as Building, count: 3 },
+		{ type: "Mosque" as Building, count: 1 },
+		{ type: "Parliament" as Building, count: 3 },
+		{ type: "CottonPlantation" as Building, count: 1 },
+		{ type: "PrintingHouse" as Building, count: 3 },
+	];
+
+	// Determine map bounds
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+
+	if (mapMaxX === Number.NEGATIVE_INFINITY) {
+		return { nonElectPlacement: null, cleared: null, electPlacement: null, message: "No map tiles available" };
+	}
+
+	const maxX = Math.floor(mapMaxX);
+	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+	// Clear rows 7..10 -> indexes 6..9
+	const clearMinY = 6;
+	const clearMaxY = 9;
+	const cleared = clearRange(minX, maxX, clearMinY, clearMaxY);
+
+	// Split cnList into electrified vs non-electrified using the building
+	// definition `power` flag: a building with `Config.Building[<type>].power === true`
+	// is considered to REQUIRE electricity. This makes classification
+	// deterministic and matches the user's "require electrification" intent.
+	const nonElectSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
+	const electSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
+	for (const item of cnList) {
+		try {
+			const def = Config.Building[item.type];
+			const requiresPower = !!(def && def.power === true);
+			if (requiresPower) {
+				electSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
+			} else {
+				nonElectSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
+			}
+		} catch (e) {
+			// Conservative fallback: treat as non-electrified
+			nonElectSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
+		}
+	}
+
+	// Place non-electrified in rows 7..13 (indexes 6..12)
+	const nonMinY = 6;
+	const nonMaxY = Math.min(Math.floor(mapMaxY), 12);
+	const nonElectPlacement = buildBuildingsInRange(minX, maxX, nonMinY, nonMaxY, nonElectSpecs);
+
+	// Ensure a coal power plant exists at start of electrified block and then place electrified buildings
+	const electStartY = 24; // index 24 == row 25
+	const electEndY = Math.floor(mapMaxY);
+
+	// Remove any CoalPowerPlant entries from electSpecs to avoid duplicate and then add one at start
+	const filteredElectSpecs = electSpecs.filter((s) => s.type !== ("CoalPowerPlant" as Building));
+	const electWithCoal = [{ type: "CoalPowerPlant" as Building, count: 1, targetLevel: 15 }, ...filteredElectSpecs];
+
+	const electPlacement = buildBuildingsInRange(minX, maxX, electStartY, electEndY, electWithCoal);
+
+	ensureVisualRefresh();
+	return { nonElectPlacement: { results: nonElectPlacement.results }, cleared, electPlacement: { results: electPlacement.results } };
+}
+
+
 
 

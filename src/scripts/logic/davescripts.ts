@@ -1010,5 +1010,105 @@ export function prepareCnTowerMaterials(): {
 }
 
 
+	/**
+	 * 007 - Prepare Atomium and Oxford University materials
+	 *
+	 * - Clear rows 7..13 (indexes 6..12) and rows 25..30 (indexes 24..29)
+	 *   in the rightmost 10-tile band.
+	 * - From the provided building list, split into those that REQUIRE power
+	 *   (Config.Building[...].power === true) and those that do not.
+	 * - Place non-powered buildings into rows 7..13 (indexes 6..12).
+	 * - Place powered buildings starting at row 25 (index 24) and ensure a
+	 *   CoalPowerPlant exists at the start of the powered block.
+	 */
+	export function prepareAtomiumAndOxUni(): {
+		nonElectPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+		clearedTop: { cleared: number; preservedWonders: number; preservedMines: number } | null;
+		clearedBottom: { cleared: number; preservedWonders: number; preservedMines: number } | null;
+		electPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+		message?: string;
+	} {
+		const gs = getGameState();
+
+		// Building plan (type -> count)
+		const plan: Array<{ type: Building; count: number }> = [
+			{ type: "GunpowderMill" as Building, count: 2 },
+			{ type: "PoetrySchool" as Building, count: 3 },
+			{ type: "PaperMaker" as Building, count: 1 },
+			{ type: "Brewery" as Building, count: 1 },
+			{ type: "Stable" as Building, count: 1 },
+			{ type: "UraniumEnrichmentPlant" as Building, count: 20 },
+			{ type: "DynamiteWorkshop" as Building, count: 3 },
+			{ type: "RifleFactory" as Building, count: 3 },
+			{ type: "Shrine" as Building, count: 2 },
+			{ type: "AtomicFacility" as Building, count: 6 },
+			{ type: "GatlingGunFactory" as Building, count: 3 },
+			{ type: "University" as Building, count: 3 },
+			{ type: "ArtilleryFactory" as Building, count: 3 },
+		];
+
+		// Determine map bounds
+		let mapMaxX = Number.NEGATIVE_INFINITY;
+		let mapMaxY = Number.NEGATIVE_INFINITY;
+		for (const xy of gs.tiles.keys()) {
+			const p = tileToPoint(xy);
+			if (p.x > mapMaxX) mapMaxX = p.x;
+			if (p.y > mapMaxY) mapMaxY = p.y;
+		}
+
+		if (mapMaxX === Number.NEGATIVE_INFINITY) {
+			return { nonElectPlacement: null, clearedTop: null, clearedBottom: null, electPlacement: null, message: "No map tiles available" };
+		}
+
+		const maxX = Math.floor(mapMaxX);
+		const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+		// Clear top band rows 7..13 -> indexes 6..12
+		const topMinY = 6;
+		const topMaxY = Math.min(Math.floor(mapMaxY), 12);
+		const clearedTop = clearRange(minX, maxX, topMinY, topMaxY);
+
+		// Clear bottom band rows 25..30 -> indexes 24..29
+		const bottomMinY = 24;
+		const bottomMaxY = Math.min(Math.floor(mapMaxY), 29);
+		const clearedBottom = clearRange(minX, maxX, bottomMinY, bottomMaxY);
+
+	// After clearing, ensure uranium and aluminium supply by placing
+	// mines using the buildMines helper which respects deposits and
+	// never overwrites existing mines.
+	// Place 4 Uranium mines and 3 Aluminum extractors.
+	buildMines("UraniumMine" as Building, 15, 4);
+	buildMines("AluminumSmelter" as Building, 15, 3);
+
+		// Split plan by Config.Building[...].power === true
+		const nonElectSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
+		const electSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
+		for (const item of plan) {
+			try {
+				const def = Config.Building[item.type];
+				const requiresPower = !!(def && def.power === true);
+				if (requiresPower) electSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
+				else nonElectSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
+			} catch (e) {
+				// Conservative fallback
+				nonElectSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
+			}
+		}
+
+		// Place non-powered in rows 7..13
+		const nonPlacement = buildBuildingsInRange(minX, maxX, topMinY, topMaxY, nonElectSpecs);
+
+		// Ensure a CoalPowerPlant at start of electrified block and then place powered buildings
+		const electStartY = 24;
+		const electEndY = Math.floor(mapMaxY);
+		const filteredElect = electSpecs.filter((s) => s.type !== ("CoalPowerPlant" as Building));
+		const electWithCoal = [{ type: "CoalPowerPlant" as Building, count: 1, targetLevel: 15 }, ...filteredElect];
+		const electPlacement = buildBuildingsInRange(minX, maxX, electStartY, electEndY, electWithCoal);
+
+		ensureVisualRefresh();
+		return { nonElectPlacement: { results: nonPlacement.results }, clearedTop, clearedBottom, electPlacement: { results: electPlacement.results } };
+	}
+
+
 
 

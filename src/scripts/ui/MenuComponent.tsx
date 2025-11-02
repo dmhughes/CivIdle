@@ -575,13 +575,30 @@ export function MenuComponent(): React.ReactNode {
                   </div>
                   <div
                      className="menu-popover-item"
-                     onPointerDown={() => {
+                     onPointerDown={async () => {
                         playClick();
-                        showToast("Dave's scripts are not available in this build.");
                         setActive(null);
+                        try {
+                           const mod = await import("../logic/davescripts");
+                           if (mod && typeof mod.prepareAtomiumAndOxUni === "function") {
+                              const res = mod.prepareAtomiumAndOxUni();
+                              const opts = getGameOptions();
+                              opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                              opts.daveScriptsRun.PrepareAtomiumAndOxUni = opts.rebirthInfo?.length ?? 0;
+                              notifyGameOptionsUpdate(opts);
+                              const non = res.nonElectPlacement ? res.nonElectPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              const elect = res.electPlacement ? res.electPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              showToast(`PrepareAtomiumAndOxUni: clearedTop ${res.clearedTop?.cleared ?? 0}; clearedBottom ${res.clearedBottom?.cleared ?? 0}; non-elect: ${non}; elect: ${elect}`);
+                           } else {
+                              showToast("Dave's scripts are not available in this build.");
+                           }
+                        } catch (err) {
+                           playError();
+                           showToast(String(err));
+                        }
                      }}
                   >
-                     <MenuItem check={false}>{"007 - Prepare Atomium and Ox Uni"}</MenuItem>
+                     <MenuItem check={((gameOptions.daveScriptsRun?.PrepareAtomiumAndOxUni ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"007 - Prepare Atomium and Ox Uni"}</MenuItem>
                   </div>
                </div>
             </div>

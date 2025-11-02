@@ -54,52 +54,69 @@ export function clearRange(
 	maxY: number,
 ): { cleared: number; preservedWonders: number; preservedMines: number } {
 	const gs = getGameState();
-	let cleared = 0;
-	let preservedWonders = 0;
-	let preservedMines = 0;
 
-	for (let x = minX; x <= maxX; x++) {
-		for (let y = minY; y <= maxY; y++) {
-			const xy = pointToTile({ x, y });
-			const td = gs.tiles.get(xy);
-			if (!td || !td.building) continue;
+	let clearedTotal = 0;
+	// use sets to avoid double-counting preserved tiles across passes
+	const preservedWondersSet = new Set<number>();
+	const preservedMinesSet = new Set<number>();
 
-			const type = td.building.type;
+	const MAX_PASSES = 10;
 
-			// Never remove Wonders
-			if (isWorldOrNaturalWonder(type)) {
-				preservedWonders++;
-				continue;
-			}
+	for (let pass = 0; pass < MAX_PASSES; pass++) {
+		let passCleared = 0;
 
-			// Never remove a tile that sits on an important deposit that has a corresponding
-			// extractor building defined in the game config.
+		for (let x = minX; x <= maxX; x++) {
+			for (let y = minY; y <= maxY; y++) {
+				const xy = pointToTile({ x, y });
+				const td = gs.tiles.get(xy);
+				if (!td || !td.building) continue;
+
+				const type = td.building.type;
+
+				// Never remove Wonders
+				if (isWorldOrNaturalWonder(type)) {
+					preservedWondersSet.add(xy);
+					continue;
+				}
+
+				// Never remove a tile that sits on an important deposit that has a corresponding
+				// extractor building defined in the game config, unless that extractor
+				// is not actually present on this tile (we only preserve true extractor)
 				let hasProtectedDeposit = false;
-				// Iterate deposit keys and protect tiles that have an extractable deposit
+				let isExtractorBuildingPresent = false;
 				for (const depositKey of Object.keys(td.deposit) as Deposit[]) {
 					if (!td.deposit[depositKey]) continue;
 					const extractor = getBuildingThatExtract(depositKey);
 					if (extractor) {
 						hasProtectedDeposit = true;
+						if (td.building.type === extractor) {
+							isExtractorBuildingPresent = true;
+						}
 						break;
 					}
 				}
 
-			if (hasProtectedDeposit) {
-				preservedMines++;
-				continue;
-			}
+				if (hasProtectedDeposit && isExtractorBuildingPresent) {
+					preservedMinesSet.add(xy);
+					continue;
+				}
 
-			// Safe to delete
-			td.building = undefined;
-			cleared++;
+				// Safe to delete (either no protected deposit, or the deposit's
+				// extractor isn't present here and we want to allow deletion)
+				td.building = undefined;
+				passCleared++;
+			}
 		}
+
+		// If nothing was deleted this pass we're done; otherwise update totals
+		if (passCleared === 0) break;
+		clearedTotal += passCleared;
+		clearTransportSourceCache();
+		// allow visuals to catch up between passes
+		ensureVisualRefresh();
 	}
 
-	if (cleared > 0) clearTransportSourceCache();
-	ensureVisualRefresh();
-
-	return { cleared, preservedWonders, preservedMines };
+	return { cleared: clearedTotal, preservedWonders: preservedWondersSet.size, preservedMines: preservedMinesSet.size };
 }
 
 /**
@@ -503,6 +520,95 @@ export async function buildApartments(): Promise<{
 
 
 /**
+ * 004 - Prepare Condo Materials
+ *
+ * - In the rightmost 10-tile band, starting at row 3 (index 2) place:
+ *   1 x Sandpit
+ *   4 x SteelMill
+ *   4 x RebarPlant
+ *   5 x ConcretePlant
+ *   5 x ReinforcedConcretePlant
+ *   5 x IronForge
+ *   (all requested at targetLevel 15)
+ *
+ * - Then clear everything in that same 10-tile band from row 15 (index 14)
+ *   down for a total of 15 rows (rows 14..14+14 clamped to map) using clearRange.
+ *
+ * - Finally, starting at row 15 (index 14) build:
+ *   50 x Pizzeria
+ *   5 x FlourMill
+ *   5 x CheeseMaker
+ *   5 x PoultryFarm
+ *   1 x DairyFarm
+ *
+ * Returns a summary containing placement results for both phases and the
+ * number of tiles cleared.
+ */
+export function prepareCondoMaterials(): {
+	topPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+	cleared: { cleared: number; preservedWonders: number; preservedMines: number } | null;
+	bottomPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+	message?: string;
+} {
+	const gs = getGameState();
+
+	// Determine map bounds
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+
+	if (mapMaxX === Number.NEGATIVE_INFINITY) {
+		return { topPlacement: null, cleared: null, bottomPlacement: null, message: "No map tiles available" };
+	}
+
+	const maxX = Math.floor(mapMaxX);
+	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+	// Phase 1: top materials at row index 2 (row 3)
+	const topMinY = 2;
+	const topMaxY = Math.min(Math.floor(mapMaxY), topMinY + 3); // cover 4 rows starting at index 2
+
+	const topSpecs = [
+		{ type: "Sandpit" as Building, count: 1, targetLevel: 15 },
+		{ type: "SteelMill" as Building, count: 4, targetLevel: 15 },
+		{ type: "RebarPlant" as Building, count: 4, targetLevel: 15 },
+		{ type: "ConcretePlant" as Building, count: 5, targetLevel: 15 },
+		{ type: "ReinforcedConcretePlant" as Building, count: 5, targetLevel: 15 },
+		{ type: "IronForge" as Building, count: 5, targetLevel: 15 },
+	];
+
+	const topPlacement = buildBuildingsInRange(minX, maxX, topMinY, topMaxY, topSpecs);
+
+	// Phase 2: clear lower band starting at row index 14 for 15 rows
+	const clearStartY = 14;
+	const clearEndY = Math.min(Math.floor(mapMaxY), clearStartY + 14); // total 15 rows
+	const cleared = clearRange(minX, maxX, clearStartY, clearEndY);
+
+	// Phase 3: build bottom materials starting at row index 14
+	const bottomMinY = clearStartY;
+	const bottomMaxY = clearEndY;
+
+	const bottomSpecs = [
+		{ type: "Pizzeria" as Building, count: 50, targetLevel: 15 },
+		{ type: "FlourMill" as Building, count: 5, targetLevel: 15 },
+		{ type: "CheeseMaker" as Building, count: 5, targetLevel: 15 },
+		{ type: "PoultryFarm" as Building, count: 5, targetLevel: 15 },
+		{ type: "DairyFarm" as Building, count: 1, targetLevel: 15 },
+	];
+
+	const bottomPlacement = buildBuildingsInRange(minX, maxX, bottomMinY, bottomMaxY, bottomSpecs);
+
+	ensureVisualRefresh();
+
+	return { topPlacement: { results: topPlacement.results }, cleared, bottomPlacement: { results: bottomPlacement.results } };
+}
+
+
+/**
  * Build apartment support buildings in the same right-hand 10-tile band.
  * Starts at row 7 (index = 6) and covers 4 rows (y = 6..9).
  * Places:
@@ -549,7 +655,7 @@ export function buildApartmentSupport(): {
 		{ type: "PoultryFarm" as Building, count: 15, targetLevel: 15 },
 		{ type: "CheeseMaker" as Building, count: 12, targetLevel: 15 },
 		{ type: "FlourMill" as Building, count: 2, targetLevel: 15 },
-		{ type: "DairyFarm" as Building, count: 2, targetLevel: 15 },
+		{ type: "DairyFarm" as Building, count: 2, targetLevel: 15 }
 	];
 
 	const placement = buildBuildingsInRange(minX, maxX, minY, maxY, specs);

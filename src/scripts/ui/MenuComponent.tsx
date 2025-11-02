@@ -491,13 +491,31 @@ export function MenuComponent(): React.ReactNode {
                   </div>
                   <div
                      className="menu-popover-item"
-                     onPointerDown={() => {
+                     onPointerDown={async () => {
                         playClick();
-                        showToast("Dave's scripts are not available in this build.");
                         setActive(null);
+                        try {
+                           const mod = await import("../logic/davescripts");
+                           if (mod && typeof mod.prepareCondoMaterials === "function") {
+                              const res = mod.prepareCondoMaterials();
+                              // mark as run for this rebirth
+                              const opts = getGameOptions();
+                              opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                              opts.daveScriptsRun.PrepareCondoMaterials = opts.rebirthInfo?.length ?? 0;
+                              notifyGameOptionsUpdate(opts);
+                              const top = res.topPlacement ? res.topPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              const bottom = res.bottomPlacement ? res.bottomPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              showToast(`PrepareCondoMaterials: top: ${top}; cleared ${res.cleared?.cleared ?? 0}; bottom: ${bottom}`);
+                           } else {
+                              showToast("Dave's scripts are not available in this build.");
+                           }
+                        } catch (err) {
+                           playError();
+                           showToast(String(err));
+                        }
                      }}
                   >
-                     <MenuItem check={false}>{"004 - Prepare Condo Materials"}</MenuItem>
+                     <MenuItem check={((gameOptions.daveScriptsRun?.PrepareCondoMaterials ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"004 - Prepare Condo Materials"}</MenuItem>
                   </div>
                   {/* 004 was removed to keep the list contiguous */}
                   <div

@@ -15,6 +15,7 @@ import { findSpecialBuilding, getBuildingThatExtract, isWorldOrNaturalWonder } f
 import { Config } from "../../../shared/logic/Config";
 import { getGameState, notifyGameStateUpdate } from "../../../shared/logic/GameStateLogic";
 import { getGrid } from "../../../shared/logic/IntraTickCache";
+import type { ICloneBuildingData } from "../../../shared/logic/Tile";
 import { BuildingInputMode, makeBuilding, STOCKPILE_CAPACITY_MAX, STOCKPILE_MAX_MAX } from "../../../shared/logic/Tile";
 import { clearTransportSourceCache } from "../../../shared/logic/Update";
 import { pointToTile, tileToPoint } from "../../../shared/utilities/Helper";
@@ -722,6 +723,38 @@ export async function deployApartments(): Promise<{
 	const minY = 0;
 	const maxY = Math.floor(mapMaxY);
 
+	// Ensure a CoalPowerPlant exists in the left-hand strip so CloneLabs
+	// will be able to be powered. We will not overwrite existing buildings
+	// or wonders — only place on the first empty tile scanning top->bottom,
+	// left->right. If a CoalPowerPlant already exists in the strip, do nothing.
+	let coalExists = false;
+	for (const [xy, td] of gs.tiles.entries()) {
+		if (!td || !td.building) continue;
+		const p = tileToPoint(xy);
+		if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
+		if (td.building.type === ("CoalPowerPlant" as Building)) { coalExists = true; break; }
+	}
+	if (!coalExists) {
+		let placedCoal = false;
+		for (let y = minY; y <= maxY && !placedCoal; y++) {
+			for (let x = minX; x <= maxX && !placedCoal; x++) {
+				const xy = pointToTile({ x, y });
+				const td = gs.tiles.get(xy);
+				if (!td) continue;
+				// Only place on empty tiles; do not overwrite wonders/mines/other buildings
+				if (!td.building) {
+					const b = makeBuilding({ type: "CoalPowerPlant" as Building, level: 0, desiredLevel: 15 });
+					td.building = b;
+					placedCoal = true;
+				}
+			}
+		}
+		if (placedCoal) {
+			clearTransportSourceCache();
+			ensureVisualRefresh();
+		}
+	}
+
 	let remaining = TOTAL;
 	let totalPlaced = 0;
 	const chunks: number[] = [];
@@ -1044,7 +1077,7 @@ export function prepareCnTowerMaterials(): {
 			{ type: "AtomicFacility" as Building, count: 6 },
 			{ type: "GatlingGunFactory" as Building, count: 3 },
 			{ type: "University" as Building, count: 3 },
-			{ type: "ArtilleryFactory" as Building, count: 3 },
+			{ type: "ArtilleryFactory" as Building, count: 10 },
 		];
 
 		// Determine map bounds
@@ -1076,8 +1109,8 @@ export function prepareCnTowerMaterials(): {
 	// After clearing, ensure uranium and aluminium supply by placing
 	// mines using the buildMines helper which respects deposits and
 	// never overwrites existing mines.
-	// Place 4 Uranium mines and 3 Aluminum extractors.
-	buildMines("UraniumMine" as Building, 15, 4);
+	// Place 6 Uranium mines and 3 Aluminum extractors.
+	buildMines("UraniumMine" as Building, 15, 6);
 	buildMines("AluminumSmelter" as Building, 15, 3);
 
 		// Split plan by Config.Building[...].power === true
@@ -1108,6 +1141,281 @@ export function prepareCnTowerMaterials(): {
 		ensureVisualRefresh();
 		return { nonElectPlacement: { results: nonPlacement.results }, clearedTop, clearedBottom, electPlacement: { results: electPlacement.results } };
 	}
+
+
+/**
+ * 008 - Prepare Clone Labs
+ *
+ * - Clear rows 7..13 (indexes 6..12) and rows 25..30 (indexes 24..29)
+ *   in the rightmost 10-tile band.
+ * - From the provided building list, split into those that REQUIRE power
+ *   (Config.Building[...].power === true) and those that do not.
+ * - Place non-powered buildings into rows 7..13 (indexes 6..12).
+ * - Place powered buildings starting at row 25 (index 24) and ensure a
+ *   CoalPowerPlant exists at the start of the powered block.
+ */
+export function prepareCloneLabs(): {
+	nonElectPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+	clearedTop: { cleared: number; preservedWonders: number; preservedMines: number } | null;
+	clearedBottom: { cleared: number; preservedWonders: number; preservedMines: number } | null;
+	electPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+	message?: string;
+} {
+	const gs = getGameState();
+
+	// Building plan (type -> count) derived from user spec
+	const plan: Array<{ type: Building; count: number }> = [
+		{ type: "CableFactory" as Building, count: 4 },
+		{ type: "Glassworks" as Building, count: 2 },
+		{ type: "GunpowderMill" as Building, count: 6 },
+		{ type: "OilRefinery" as Building, count: 4 },
+		{ type: "PlasticsFactory" as Building, count: 2 },
+		{ type: "SteelMill" as Building, count: 4 },
+		{ type: "IronForge" as Building, count: 4 },
+		{ type: "DynamiteWorkshop" as Building, count: 6 },
+		{ type: "Steamworks" as Building, count: 4 },
+		{ type: "LensWorkshop" as Building, count: 2 },
+		{ type: "RifleFactory" as Building, count: 4 },
+		{ type: "BiplaneFactory" as Building, count: 2 },
+		{ type: "GatlingGunFactory" as Building, count: 5 },
+		{ type: "ArtilleryFactory" as Building, count: 4 },
+		{ type: "Sandpit" as Building, count: 1 },
+		{ type: "CoalPowerPlant" as Building, count: 1 },
+		{ type: "SiliconSmelter" as Building, count: 1 },
+		{ type: "SemiconductorFab" as Building, count: 2 },
+		{ type: "ComputerFactory" as Building, count: 6 },
+		{ type: "RocketFactory" as Building, count: 7 },
+		{ type: "AirplaneFactory" as Building, count: 2 },
+		{ type: "RocketFactory" as Building, count: 2 },
+		{ type: "SatelliteFactory" as Building, count: 2 },
+		{ type: "SpacecraftFactory" as Building, count: 8 },
+	];
+
+	// Determine map bounds
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+
+	if (mapMaxX === Number.NEGATIVE_INFINITY) {
+		return { nonElectPlacement: null, clearedTop: null, clearedBottom: null, electPlacement: null, message: "No map tiles available" };
+	}
+
+	const maxX = Math.floor(mapMaxX);
+	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+	// Clear top band rows 7..13 -> indexes 6..12
+	const topMinY = 6;
+	const topMaxY = Math.min(Math.floor(mapMaxY), 12);
+	const clearedTop = clearRange(minX, maxX, topMinY, topMaxY);
+
+		// Clear bottom band rows 25..30 -> indexes 24..29
+		const bottomMinY = 24;
+		const bottomMaxY = Math.min(Math.floor(mapMaxY), 29);
+		const clearedBottom = clearRange(minX, maxX, bottomMinY, bottomMaxY);
+
+		// After clearing, ensure oil supply by placing oil wells using buildMines helper
+		// buildMines respects deposits and never overwrites existing mines.
+		// Place 3 OilWell mines.
+		buildMines("OilWell" as Building, 15, 3);
+
+	// Split plan by Config.Building[...].power === true
+	const nonElectSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
+	const electSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
+	for (const item of plan) {
+		try {
+			const def = Config.Building[item.type];
+			const requiresPower = !!(def && def.power === true);
+			if (requiresPower) electSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
+			else nonElectSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
+		} catch (e) {
+			// Conservative fallback
+			nonElectSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
+		}
+	}
+
+	// Place non-powered in rows 7..13
+	const nonPlacement = buildBuildingsInRange(minX, maxX, topMinY, topMaxY, nonElectSpecs);
+
+	// Ensure a CoalPowerPlant at start of electrified block and then place powered buildings
+	const electStartY = 24;
+	const electEndY = Math.floor(mapMaxY);
+	const filteredElect = electSpecs.filter((s) => s.type !== ("CoalPowerPlant" as Building));
+	const electWithCoal = [{ type: "CoalPowerPlant" as Building, count: 1, targetLevel: 15 }, ...filteredElect];
+	const electPlacement = buildBuildingsInRange(minX, maxX, electStartY, electEndY, electWithCoal);
+
+	ensureVisualRefresh();
+	return { nonElectPlacement: { results: nonPlacement.results }, clearedTop, clearedBottom, electPlacement: { results: electPlacement.results } };
+}
+
+
+/**
+ * Build Clone Labs
+ *
+ * - Delete Condo buildings but leave 20 Condos in place (do not create new Condos).
+ * - Build 860 CloneLab buildings in the left-hand 20-tile-wide strip starting at y=0.
+ * - Build in batches of 100 (chunks) and wait for each chunk to complete like
+ *   deployApartments/replaceApartmentsWithCondos.
+ * - After placing CloneLab buildings, set their cloning input resource to
+ *   "Spacecraft" (the default is "Computer").
+ */
+export async function buildCloneLabs(): Promise<{
+	requested: number;
+	placed: number;
+	remaining: number;
+	chunks: number[];
+	removedCondos: number;
+	message?: string;
+}> {
+	const TOTAL = 860;
+	const CHUNK = 100;
+	const gs = getGameState();
+
+	// Remove Condo buildings but ensure the 20 that remain are from the
+	// top row (y === 0) when possible. Behavior:
+	//  - Prefer to keep up to 20 Condos on the top row (left-to-right).
+	//  - If there are fewer than 20 on the top row, keep those and then
+	//    preserve additional Condos (top-to-bottom, left-to-right) until
+	//    a total of 20 remain.
+	const allCondos: number[] = [];
+	const topRowCondos: Array<{ xy: number; x: number; y: number }> = [];
+	for (const [xy, td] of gs.tiles.entries()) {
+		if (!td || !td.building) continue;
+		if (td.building.type === ("Condo" as Building)) {
+			const p = tileToPoint(xy);
+			allCondos.push(xy);
+			if (p.y === 0) topRowCondos.push({ xy, x: p.x, y: p.y });
+		}
+	}
+
+	// sort top-row condos left-to-right
+	topRowCondos.sort((a, b) => a.x - b.x);
+
+	const keepSet = new Set<number>();
+	// keep up to 20 from the top row
+	for (let i = 0; i < Math.min(20, topRowCondos.length); i++) keepSet.add(topRowCondos[i].xy);
+
+	// if we still need more to reach 20, pick from the remaining condos
+	if (keepSet.size < 20) {
+		// build a list of remaining condos with coordinates, sorted top-to-bottom then left-to-right
+		const remaining: Array<{ xy: number; x: number; y: number }> = [];
+		for (const xy of allCondos) {
+			if (keepSet.has(xy)) continue;
+			const p = tileToPoint(xy);
+			remaining.push({ xy, x: p.x, y: p.y });
+		}
+		remaining.sort((a, b) => (a.y === b.y ? a.x - b.x : a.y - b.y));
+		for (let i = 0; i < remaining.length && keepSet.size < 20; i++) keepSet.add(remaining[i].xy);
+	}
+
+	let removed = 0;
+	for (const xy of allCondos) {
+		if (keepSet.has(xy)) continue;
+		const td = gs.tiles.get(xy);
+		if (!td || !td.building) continue;
+		td.building = undefined;
+		removed++;
+	}
+	if (removed > 0) clearTransportSourceCache();
+	ensureVisualRefresh();
+
+	// Determine map bounds (need minX for left-hand edge and maxY for height)
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMinX = Number.POSITIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.x < mapMinX) mapMinX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+	if (mapMaxX === Number.NEGATIVE_INFINITY || mapMinX === Number.POSITIVE_INFINITY) {
+		return { requested: TOTAL, placed: 0, remaining: TOTAL, chunks: [], removedCondos: removed, message: "No map tiles available" };
+	}
+
+	// LEFT-hand 20-tile-wide strip
+	const minX = Math.max(0, Math.floor(mapMinX));
+	const maxX = Math.min(Math.floor(mapMaxX), minX + 19);
+	const minY = 0;
+	const maxY = Math.floor(mapMaxY);
+
+	let remaining = TOTAL;
+	let totalPlaced = 0;
+	const chunks: number[] = [];
+
+	const countCompleted = (): number => {
+		const s = getGameState();
+		let c = 0;
+		for (const [xy, td] of s.tiles.entries()) {
+			if (!td || !td.building) continue;
+			const p = tileToPoint(xy);
+			if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
+			if (td.building.type === ("CloneLab" as Building) && td.building.status === "completed") c++;
+		}
+		return c;
+	};
+
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	while (remaining > 0) {
+		const chunkSize = Math.min(CHUNK, remaining);
+
+		const res = buildBuildingsInRange(minX, maxX, minY, maxY, [
+			{ type: "CloneLab" as Building, count: chunkSize, targetLevel: 10 },
+		]);
+
+		const placed = res.results.length > 0 ? res.results[0].placed : 0;
+		chunks.push(placed);
+		totalPlaced += placed;
+		remaining -= placed;
+
+		if (placed > 0) {
+			// Immediately set CloneLab inputResource to "Spacecraft" for any newly
+			// placed CloneLabs inside the strip so they default to cloning
+			// Spacecraft instead of Computer.
+			for (const [xy, td] of getGameState().tiles.entries()) {
+				if (!td || !td.building) continue;
+				const p = tileToPoint(xy);
+				if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
+				if (td.building.type === ("CloneLab" as Building)) {
+					// ICloneBuildingData has inputResource and transportedAmount
+					(td.building as ICloneBuildingData).inputResource = "Spacecraft";
+					if ((td.building as ICloneBuildingData).transportedAmount === undefined) (td.building as ICloneBuildingData).transportedAmount = 0;
+				}
+			}
+			clearTransportSourceCache();
+			ensureVisualRefresh();
+		}
+
+		if (placed === 0) {
+			// nothing could be placed (no empty tiles) — abort to avoid infinite loop
+			break;
+		}
+
+		// Wait until the newly placed buildings in this chunk are completed.
+		const completedBefore = countCompleted();
+		const need = placed;
+		const MAX_WAIT_MS = 5 * 60 * 1000; // 5 minutes max per chunk
+		const POLL_MS = 1000;
+		let waited = 0;
+		while (true) {
+			await sleep(POLL_MS);
+			waited += POLL_MS;
+			const completedAfter = countCompleted();
+			if (completedAfter - completedBefore >= need) break;
+			if (waited >= MAX_WAIT_MS) {
+				// give up waiting for this chunk and continue with next (or abort)
+				break;
+			}
+		}
+	}
+
+	ensureVisualRefresh();
+	return { requested: TOTAL, placed: totalPlaced, remaining, chunks, removedCondos: removed };
+}
 
 
 

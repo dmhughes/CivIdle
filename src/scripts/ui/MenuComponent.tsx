@@ -600,6 +600,58 @@ export function MenuComponent(): React.ReactNode {
                   >
                      <MenuItem check={((gameOptions.daveScriptsRun?.PrepareAtomiumAndOxUni ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"007 - Prepare Atomium and Ox Uni"}</MenuItem>
                   </div>
+                    <div
+                       className="menu-popover-item"
+                       onPointerDown={async () => {
+                          playClick();
+                          setActive(null);
+                          try {
+                             const mod = await import("../logic/davescripts");
+                             if (mod && typeof mod.prepareCloneLabs === "function") {
+                                const res = mod.prepareCloneLabs();
+                                const opts = getGameOptions();
+                                opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                opts.daveScriptsRun.PrepareCloneLabs = opts.rebirthInfo?.length ?? 0;
+                                notifyGameOptionsUpdate(opts);
+                                const non = res.nonElectPlacement ? res.nonElectPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                                const elect = res.electPlacement ? res.electPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                                showToast(`PrepareCloneLabs: clearedTop ${res.clearedTop?.cleared ?? 0}; clearedBottom ${res.clearedBottom?.cleared ?? 0}; non-elect: ${non}; elect: ${elect}`);
+                             } else {
+                                showToast("Dave's scripts are not available in this build.");
+                             }
+                          } catch (err) {
+                             playError();
+                             showToast(String(err));
+                          }
+                       }}
+                    >
+                       <MenuItem check={((gameOptions.daveScriptsRun?.PrepareCloneLabs ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"008 - Prepare Clone Labs"}</MenuItem>
+                    </div>
+                   <div
+                      className="menu-popover-item"
+                      onPointerDown={async () => {
+                         playClick();
+                         setActive(null);
+                         try {
+                            const mod = await import("../logic/davescripts");
+                            if (mod && typeof mod.buildCloneLabs === "function") {
+                               const res = await mod.buildCloneLabs();
+                               const opts = getGameOptions();
+                               opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                               opts.daveScriptsRun.BuildCloneLabs = opts.rebirthInfo?.length ?? 0;
+                               notifyGameOptionsUpdate(opts);
+                               showToast(`BuildCloneLabs: removedCondos ${res.removedCondos}; placed ${res.placed}/${res.requested}; remaining ${res.remaining}`);
+                            } else {
+                               showToast("Dave's scripts are not available in this build.");
+                            }
+                         } catch (err) {
+                            playError();
+                            showToast(String(err));
+                         }
+                      }}
+                   >
+                      <MenuItem check={((gameOptions.daveScriptsRun?.BuildCloneLabs ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"009 - Build Clone Labs"}</MenuItem>
+                   </div>
                </div>
             </div>
             {isHalloween(now) ? (

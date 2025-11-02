@@ -602,6 +602,10 @@ export function prepareCondoMaterials(): {
 
 	const bottomPlacement = buildBuildingsInRange(minX, maxX, bottomMinY, bottomMaxY, bottomSpecs);
 
+	// Place coal mines needed for bottom materials — use the helper so we only
+	// place mines on valid deposit tiles and never overwrite existing mines.
+	const coalPlaced = buildMines("CoalMine" as Building, 15, 2);
+
 	ensureVisualRefresh();
 
 	return { topPlacement: { results: topPlacement.results }, cleared, bottomPlacement: { results: bottomPlacement.results } };
@@ -775,6 +779,120 @@ export async function deployApartments(): Promise<{
 
 	ensureVisualRefresh();
 	return { requested: TOTAL, placed: totalPlaced, remaining, chunks };
+}
+
+
+/**
+ * Replace all Apartments with Condos.
+ *
+ * - Deletes every `Apartment` building found on the map (count returned).
+ * - Clears visuals and transport caches.
+ * - Builds `total` Condos in the top-left 20-tile-wide strip starting at y=0
+ *   in chunks of `chunkSize` (100) using `buildBuildingsInRange`.
+ * - Condos are created at level 0 with desiredLevel=10; buildBuildingsInRange
+ *   already sets stockpile/input to maximum for new buildings.
+ *
+ * Returns a summary similar to `deployApartments` plus `removedApartments`.
+ */
+export async function replaceApartmentsWithCondos(): Promise<{
+	requested: number;
+	placed: number;
+	remaining: number;
+	chunks: number[];
+	removedApartments: number;
+	message?: string;
+}> {
+	const TOTAL = 750; // same total as apartments
+	const CHUNK = 100;
+	const gs = getGameState();
+
+	// Delete all Apartment buildings from the map
+	let removed = 0;
+	for (const [xy, td] of gs.tiles.entries()) {
+		if (!td || !td.building) continue;
+		if (td.building.type === ("Apartment" as Building)) {
+			td.building = undefined;
+			removed++;
+		}
+	}
+	if (removed > 0) clearTransportSourceCache();
+	ensureVisualRefresh();
+
+	// Find map bounds (we need minX for the left-hand/top-left edge)
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMinX = Number.POSITIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.x < mapMinX) mapMinX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+	if (mapMaxX === Number.NEGATIVE_INFINITY || mapMinX === Number.POSITIVE_INFINITY) {
+		return { requested: TOTAL, placed: 0, remaining: TOTAL, chunks: [], removedApartments: removed, message: "No map tiles available" };
+	}
+
+	// TOP-LEFT 20-tile-wide strip
+	const minX = Math.max(0, Math.floor(mapMinX));
+	const maxX = Math.min(Math.floor(mapMaxX), minX + 19);
+	const minY = 0;
+	const maxY = Math.floor(mapMaxY);
+
+	let remaining = TOTAL;
+	let totalPlaced = 0;
+	const chunks: number[] = [];
+
+	const countCompleted = (): number => {
+		const s = getGameState();
+		let c = 0;
+		for (const [xy, td] of s.tiles.entries()) {
+			if (!td || !td.building) continue;
+			const p = tileToPoint(xy);
+			if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
+			if (td.building.type === ("Condo" as Building) && td.building.status === "completed") c++;
+		}
+		return c;
+	};
+
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	while (remaining > 0) {
+		const chunkSize = Math.min(CHUNK, remaining);
+
+		const res = buildBuildingsInRange(minX, maxX, minY, maxY, [
+			{ type: "Condo" as Building, count: chunkSize, targetLevel: 10 },
+		]);
+
+		const placed = res.results.length > 0 ? res.results[0].placed : 0;
+		chunks.push(placed);
+		totalPlaced += placed;
+		remaining -= placed;
+
+		if (placed === 0) {
+			// nothing could be placed (no empty tiles) — abort to avoid infinite loop
+			break;
+		}
+
+		// Wait until the newly placed buildings in this chunk are completed.
+		const completedBefore = countCompleted();
+		const need = placed;
+		const MAX_WAIT_MS = 5 * 60 * 1000; // 5 minutes max per chunk
+		const POLL_MS = 1000;
+		let waited = 0;
+		while (true) {
+			await sleep(POLL_MS);
+			waited += POLL_MS;
+			const completedAfter = countCompleted();
+			if (completedAfter - completedBefore >= need) break;
+			if (waited >= MAX_WAIT_MS) {
+				// give up waiting for this chunk and continue with next (or abort)
+				break;
+			}
+		}
+	}
+
+	ensureVisualRefresh();
+	return { requested: TOTAL, placed: totalPlaced, remaining, chunks, removedApartments: removed };
 }
 
 

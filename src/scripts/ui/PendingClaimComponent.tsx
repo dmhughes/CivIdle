@@ -44,30 +44,19 @@ export function PendingClaimComponent({ gameState }: { gameState: GameState }) {
          const { resources } = await client.claimTradesV2(toClaim);
          RequestPendingClaimUpdate.emit();
          forEach(resources, (res, amount) => {
-            const result = addResourceTo(res as Resource, amount, tiles, gameState);
+            const result = addResourceTo(res as any, amount as number, tiles, gameState);
             console.assert(result.amount === amount);
          });
          if (sizeOf(resources) > 0) {
             playKaching();
             showToast(
                t(L.PlayerTradeClaimAllMessageV2, {
-                  resources: mapOf(
-                     resources,
-<<<<<<< HEAD
-                     (res, amount) => `${Config.Resource[res as Resource].name()}: ${formatNumber(amount as number)}`,
-=======
-                     (res, amount) => `${Config.Material[res].name()}: ${formatNumber(amount)}`,
->>>>>>> upstream/main
-                  ).join(", "),
+                  resources: mapOf(resources, (res, amount) => `${Config.Material[res as Material].name()}: ${formatNumber(amount as number)}`).join(", "),
                }),
             );
             const eic = Tick.current.specialBuildings.get("EastIndiaCompany");
             forEach(resources, (res, amount) => {
-<<<<<<< HEAD
-               const tradeValue = amount * (Config.ResourcePrice[res as Resource] ?? 0);
-=======
-               const tradeValue = amount * (Config.MaterialPrice[res] ?? 0);
->>>>>>> upstream/main
+               const tradeValue = (amount as number) * (Config.MaterialPrice[res as Material] ?? 0);
                if (eic) {
                   safeAdd(eic.building.resources, "TradeValue", tradeValue);
                }

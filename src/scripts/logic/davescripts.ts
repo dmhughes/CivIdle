@@ -10,7 +10,7 @@
  */
 
 import type { Building } from "../../../shared/definitions/BuildingDefinitions";
-import type { Deposit } from "../../../shared/definitions/ResourceDefinitions";
+import type { Deposit } from "../../../shared/definitions/MaterialDefinitions";
 import { findSpecialBuilding, getBuildingThatExtract, isWorldOrNaturalWonder } from "../../../shared/logic/BuildingLogic";
 import { Config } from "../../../shared/logic/Config";
 import { getGameState, notifyGameStateUpdate } from "../../../shared/logic/GameStateLogic";

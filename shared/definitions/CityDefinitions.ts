@@ -5,6 +5,8 @@ import type { IUnlockableMultipliers } from "./ITechDefinition";
 import type { Deposit } from "./MaterialDefinitions";
 import type { Tech } from "./TechDefinitions";
 
+export const ROME_CITY_SIZE = 45;
+
 export class CityDefinitions {
    Rome: ICityDefinition = {
       name: () => t(L.Roman),
@@ -21,7 +23,8 @@ export class CityDefinitions {
          NaturalGas: 0.02,
          Uranium: 0.02,
       },
-      size: 40,
+      sizeOld: 40,
+      size: ROME_CITY_SIZE,
       buildingNames: {
          Headquarter: () => t(L.RomanForum),
       },
@@ -78,7 +81,8 @@ export class CityDefinitions {
          NaturalGas: 0.015,
          Uranium: 0.025,
       },
-      size: 50,
+      sizeOld: 50,
+      size: 40,
       buildingNames: {
          Headquarter: () => t(L.TempleOfPtah),
       },
@@ -139,7 +143,8 @@ export class CityDefinitions {
          NaturalGas: 0.03,
          Uranium: 0.03,
       },
-      size: 30,
+      sizeOld: 30,
+      size: 50,
       buildingNames: {
          Headquarter: () => t(L.TheWhiteHouse),
       },
@@ -177,7 +182,8 @@ export class CityDefinitions {
          NaturalGas: 0.025,
          Uranium: 0.01,
       },
-      size: 35,
+      sizeOld: 35,
+      size: 40,
       buildingNames: {
          Headquarter: () => t(L.Babylonian),
       },
@@ -208,7 +214,8 @@ export class CityDefinitions {
          NaturalGas: 0.01,
          Uranium: 0.025,
       },
-      size: 35,
+      sizeOld: 35,
+      size: 40,
       buildingNames: {
          Headquarter: () => t(L.ImperialPalace),
       },
@@ -305,7 +312,8 @@ export class CityDefinitions {
          NaturalGas: 0.03,
          Uranium: 0.03,
       },
-      size: 50,
+      sizeOld: 50,
+      size: 40,
       buildingNames: {
          Headquarter: () => t(L.ElyseePalace),
       },
@@ -407,7 +415,8 @@ export class CityDefinitions {
          NaturalGas: 0.04,
          Uranium: 0.01,
       },
-      size: 40,
+      sizeOld: 40,
+      size: 45,
       buildingNames: {
          Headquarter: () => t(L.RashtrapatiBhavan),
       },
@@ -459,6 +468,7 @@ export type City = keyof CityDefinitions;
 
 interface ICityDefinition {
    deposits: Record<Deposit, number>;
+   sizeOld?: number;
    size: number;
    name: () => string;
    naturalWonders: PartialSet<Building>;

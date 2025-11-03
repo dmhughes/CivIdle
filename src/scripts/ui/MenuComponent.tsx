@@ -659,16 +659,14 @@ export function MenuComponent(): React.ReactNode {
                         setActive(null);
                         try {
                            const mod = await import("../logic/davescripts");
-                           if (mod && typeof mod.buildDysonMaterials === "function") {
-                              const res = await mod.buildDysonMaterials();
+                           if (mod && typeof mod.dysonBuildPlan1 === "function") {
+                              const res = await mod.dysonBuildPlan1();
                               const opts = getGameOptions();
                               opts.daveScriptsRun = opts.daveScriptsRun ?? {};
-                              opts.daveScriptsRun.BuildDysonMaterials = opts.rebirthInfo?.length ?? 0;
+                              opts.daveScriptsRun.DysonPart1 = opts.rebirthInfo?.length ?? 0;
                               notifyGameOptionsUpdate(opts);
-                              const left = (res.leftStripPlacement || []).map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
-                              const non = res.nonElectPlacement ? res.nonElectPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
-                              const elect = res.electPlacement ? res.electPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
-                              showToast(`BuildDysonMaterials: removedCloneLabs ${res.removedCloneLabs}; cleared ${res.cleared?.cleared ?? 0}; smallRow: ${res.smallRowPlacement?.results.map(r=>`${r.type} ${r.placed}/${r.requested}`).join(", ")}; non-elect: ${non}; elect: ${elect}; left: ${left}`);
+                              const smallSummary = res.smallRowPlacement ? res.smallRowPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              showToast(`Dyson Part 1 complete: removedCloneLabs ${res.removedCloneLabs}; cleared ${res.cleared?.cleared ?? 0}; smallRow: ${smallSummary}`);
                            } else {
                               showToast("Dave's scripts are not available in this build.");
                            }
@@ -678,7 +676,88 @@ export function MenuComponent(): React.ReactNode {
                         }
                      }}
                   >
-                     <MenuItem check={((gameOptions.daveScriptsRun?.BuildDysonMaterials ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"010 - Build Dyson Materials"}</MenuItem>
+                     <MenuItem check={((gameOptions.daveScriptsRun?.DysonPart1 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Dyson Part 1"}</MenuItem>
+                  </div>
+
+                  <div
+                     className="menu-popover-item"
+                     onPointerDown={async () => {
+                        playClick();
+                        setActive(null);
+                        try {
+                           const mod = await import("../logic/davescripts");
+                           if (mod && typeof mod.dysonBuildPlan2 === "function") {
+                              const res = await mod.dysonBuildPlan2();
+                              const opts = getGameOptions();
+                              opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                              opts.daveScriptsRun.DysonPart2 = opts.rebirthInfo?.length ?? 0;
+                              notifyGameOptionsUpdate(opts);
+                              const summary = res.placement ? res.placement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              showToast(`Dyson Part 2 complete: placed ${res.placement ? res.placement.results.reduce((a,b)=>a+(b.placed||0),0):0}; ${summary}`);
+                           } else {
+                              showToast("Dave's scripts are not available in this build.");
+                           }
+                        } catch (err) {
+                           playError();
+                           showToast(String(err));
+                        }
+                     }}
+                  >
+                     <MenuItem check={((gameOptions.daveScriptsRun?.DysonPart2 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Dyson Part 2"}</MenuItem>
+                  </div>
+
+                  <div
+                     className="menu-popover-item"
+                     onPointerDown={async () => {
+                        playClick();
+                        setActive(null);
+                        try {
+                           const mod = await import("../logic/davescripts");
+                           if (mod && typeof mod.dysonBuildPlan3 === "function") {
+                              const res = await mod.dysonBuildPlan3();
+                              const opts = getGameOptions();
+                              opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                              opts.daveScriptsRun.DysonPart3 = opts.rebirthInfo?.length ?? 0;
+                              notifyGameOptionsUpdate(opts);
+                              const summary = res.placement ? res.placement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              showToast(`Dyson Part 3 complete: placed ${res.placement ? res.placement.results.reduce((a,b)=>a+(b.placed||0),0):0}; ${summary}`);
+                           } else {
+                              showToast("Dave's scripts are not available in this build.");
+                           }
+                        } catch (err) {
+                           playError();
+                           showToast(String(err));
+                        }
+                     }}
+                  >
+                     <MenuItem check={((gameOptions.daveScriptsRun?.DysonPart3 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Dyson Part 3"}</MenuItem>
+                  </div>
+
+                  <div
+                     className="menu-popover-item"
+                     onPointerDown={async () => {
+                        playClick();
+                        setActive(null);
+                        try {
+                           const mod = await import("../logic/davescripts");
+                           if (mod && typeof mod.dysonBuildPlan4 === "function") {
+                              const res = await mod.dysonBuildPlan4();
+                              const opts = getGameOptions();
+                              opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                              opts.daveScriptsRun.DysonPart4 = opts.rebirthInfo?.length ?? 0;
+                              notifyGameOptionsUpdate(opts);
+                              const summary = (res.leftStripPlacement || []).map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") || "none";
+                              showToast(`Dyson Part 4 complete: ${summary}`);
+                           } else {
+                              showToast("Dave's scripts are not available in this build.");
+                           }
+                        } catch (err) {
+                           playError();
+                           showToast(String(err));
+                        }
+                     }}
+                  >
+                     <MenuItem check={((gameOptions.daveScriptsRun?.DysonPart4 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Dyson Part 4"}</MenuItem>
                   </div>
                </div>
             </div>

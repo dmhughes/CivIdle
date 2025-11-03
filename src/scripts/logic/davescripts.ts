@@ -19,6 +19,7 @@ import type { ICloneBuildingData } from "../../../shared/logic/Tile";
 import { BuildingInputMode, makeBuilding, STOCKPILE_CAPACITY_MAX, STOCKPILE_MAX_MAX } from "../../../shared/logic/Tile";
 import { clearTransportSourceCache } from "../../../shared/logic/Update";
 import { pointToTile, tileToPoint } from "../../../shared/utilities/Helper";
+import { showToast } from "../ui/GlobalModal";
 
 function ensureVisualRefresh(): void {
 	// Notify synchronously and once on the next animation frame so UI listeners
@@ -104,7 +105,7 @@ export function clearRange(
 
 				// Safe to delete (either no protected deposit, or the deposit's
 				// extractor isn't present here and we want to allow deletion)
-				td.building = undefined;
+				td.building = undefined; // Clear the building
 				passCleared++;
 			}
 		}
@@ -357,6 +358,12 @@ export function buildInitialMines(): {
 
 	ensureVisualRefresh();
 
+	// Ensure visuals are refreshed after all plans have run
+	try {
+		ensureVisualRefresh();
+	} catch (e) {
+		console.error("ensureVisualRefresh failed in buildInitialMines:", e);
+	}
 	return {
 		houseResult,
 		aqueductPlaced,
@@ -492,6 +499,7 @@ export function buildBigBenMaterials(): {
 
 	const placement = buildBuildingsInRange(minX, maxX, startY, endY, specs);
 
+	// Immediate refresh after placement so UI shows newly placed buildings
 	ensureVisualRefresh();
 
 	return { results: placement.results };
@@ -1419,18 +1427,14 @@ export async function buildCloneLabs(): Promise<{
 
 
 /**
- * Build Dyson Materials
+ * Build Dyson Materials (simplified)
  *
  * - Delete ALL CloneLab buildings
  * - Clear the rightmost building strip from row 7 to row 30 (indexes 6..29)
- * - In row 7 (index 6) place small set: 1 Pizzeria, 1 PoultryFarm, 1 FlourMill, 1 DairyFarm
- * - Place the large plan: split by electrification (Config.Building[...].power === true)
- *   - non-electrified buildings start at row 9 (index 8)
- *   - electrified buildings start at row 25 (index 24)
- *   - ensure a CoalPowerPlant exists at the start of the electrified block
- * - Uses buildBuildingsInRange so tier ordering is respected
+ * - In row 7 (index 6) place small set: Pizzeria, PoultryFarm, FlourMill, DairyFarm
+ * - Return placement results; other plans will be added separately.
  */
-export async function buildDysonMaterials(): Promise<{
+export async function dysonBuildPlan1(): Promise<{
 	removedCloneLabs: number;
 	cleared: { cleared: number; preservedWonders: number; preservedMines: number } | null;
 	smallRowPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
@@ -1468,9 +1472,9 @@ export async function buildDysonMaterials(): Promise<{
 	const maxX = Math.floor(mapMaxX);
 	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
 
-	// Clear rows 7..30 -> indexes 6..29
+	// Clear rows 7..40 -> indexes 6..39 (extended by 10 rows)
 	const clearMinY = 6;
-	const clearMaxY = Math.min(Math.floor(mapMaxY), 29);
+	const clearMaxY = Math.min(Math.floor(mapMaxY), 39);
 	const cleared = clearRange(minX, maxX, clearMinY, clearMaxY);
 
 	// In row 7 (index 6) place small set
@@ -1478,197 +1482,394 @@ export async function buildDysonMaterials(): Promise<{
 		{ type: "Pizzeria" as Building, count: 1, targetLevel: 15 },
 		{ type: "PoultryFarm" as Building, count: 1, targetLevel: 15 },
 		{ type: "FlourMill" as Building, count: 1, targetLevel: 15 },
+		{ type: "CheeseMaker" as Building, count: 1, targetLevel: 15 },
 		{ type: "DairyFarm" as Building, count: 1, targetLevel: 15 },
 	];
 	const smallRowPlacement = buildBuildingsInRange(minX, maxX, 6, 6, smallSpecs);
 
-	// Build plan derived from user's construct_building list (name -> count)
-	const plan: Array<{ type: Building; count: number }> = [
-		{ type: "RadioStation" as Building, count: 18 },
-		{ type: "NuclearMissileSilo" as Building, count: 20 },
-		{ type: "Embassy" as Building, count: 10 },
-		{ type: "SupercomputerLab" as Building, count: 20 },
-		{ type: "RocketFactory" as Building, count: 5 },
-		{ type: "MaglevFactory" as Building, count: 6 },
-		{ type: "Parliament" as Building, count: 4 },
-		{ type: "MagazinePublisher" as Building, count: 8 },
-		{ type: "SoftwareCompany" as Building, count: 5 },
-		{ type: "AirplaneFactory" as Building, count: 6 },
-		{ type: "OpticalFiberFactory" as Building, count: 4 },
-		{ type: "InternetServiceProvider" as Building, count: 10 },
-		{ type: "Stadium" as Building, count: 5 },
-		{ type: "PublishingHouse" as Building, count: 5 },
-		{ type: "Courthouse" as Building, count: 3 },
-		{ type: "ArtilleryFactory" as Building, count: 2 },
-		{ type: "AtomicFacility" as Building, count: 3 },
-		{ type: "CarFactory" as Building, count: 4 },
-		{ type: "ComputerFactory" as Building, count: 6 },
-		{ type: "CoalPowerPlant" as Building, count: 5 },
-		{ type: "SemiconductorFab" as Building, count: 2 },
-		{ type: "SiliconSmelter" as Building, count: 1 },
-		{ type: "BiplaneFactory" as Building, count: 1 },
-		{ type: "Museum" as Building, count: 3 },
-		{ type: "GatlingGunFactory" as Building, count: 2 },
-		{ type: "ActorsGuild" as Building, count: 3 },
-		{ type: "University" as Building, count: 10 },
-		{ type: "LocomotiveFactory" as Building, count: 8 },
-		{ type: "OilRefinery" as Building, count: 8 },
-		{ type: "PrintingHouse" as Building, count: 7 },
-		{ type: "DynamiteWorkshop" as Building, count: 3 },
-		{ type: "Steamworks" as Building, count: 1 },
-		{ type: "Shrine" as Building, count: 1 },
-		{ type: "FurnitureWorkshop" as Building, count: 1 },
-		{ type: "LensWorkshop" as Building, count: 1 },
-		{ type: "MusiciansGuild" as Building, count: 1 },
-		{ type: "PaintersGuild" as Building, count: 1 },
-		{ type: "RifleFactory" as Building, count: 1 },
-		{ type: "CableFactory" as Building, count: 3 },
-		{ type: "Glassworks" as Building, count: 2 },
-		{ type: "GunpowderMill" as Building, count: 1 },
-		{ type: "Stable" as Building, count: 1 },
-		{ type: "PaperMaker" as Building, count: 1 },
-		{ type: "PlasticsFactory" as Building, count: 3 },
-		{ type: "PoetrySchool" as Building, count: 1 },
-		{ type: "SteelMill" as Building, count: 3 },
-		{ type: "IronForge" as Building, count: 1 },
-		{ type: "Sandpit" as Building, count: 1 },
-		{ type: "Brewery" as Building, count: 1 },
-		{ type: "ActorsGuild" as Building, count: 2 },
-	];
-
-	// Split by power requirement using Config.Building[...].power === true
-	const nonElectSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
-	const electSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
-	for (const item of plan) {
-		try {
-			const def = Config.Building[item.type];
-			const requiresPower = !!(def && def.power === true);
-			if (requiresPower) electSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
-			else nonElectSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
-		} catch (e) {
-			nonElectSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
-		}
+	// Immediate refresh after placement so UI shows newly placed buildings
+	// then a short tick and another refresh as a sanity-check so the
+	// 'building' state is visible immediately in the UI.
+	try {
+		ensureVisualRefresh();
+		await new Promise((r) => setTimeout(r, 50));
+		ensureVisualRefresh();
+	} catch (e) {
+		console.error("Immediate refresh failed in dysonBuildPlan1:", e);
 	}
 
-	// Place non-electrified starting at row 9 (index 8) and extending to row 13 (index 12)
-	const nonMinY = 8;
-	const nonMaxY = Math.min(Math.floor(mapMaxY), 12);
-	const nonElectPlacement = buildBuildingsInRange(minX, maxX, nonMinY, nonMaxY, nonElectSpecs);
-
-	// Wait until non-electrified placements are completed (or timeout)
-	const nonTypes = new Set(nonElectSpecs.map((s) => s.type));
-	const nonPlacedTotal = nonElectPlacement.results.reduce((acc, r) => acc + (r.placed ?? 0), 0);
-	if (nonPlacedTotal > 0) {
-		const countCompletedNon = (): number => {
+	// Wait until the small row placements complete (or timeout)
+	const smallTypes = new Set(smallSpecs.map((s) => s.type));
+	const smallPlacedTotal = smallRowPlacement.results.reduce((acc, r) => acc + (r.placed ?? 0), 0);
+	if (smallPlacedTotal > 0) {
+		const countCompletedSmall = (): number => {
 			const s = getGameState();
 			let c = 0;
 			for (const [xy, td] of s.tiles.entries()) {
 				if (!td || !td.building) continue;
 				if (td.building.status !== "completed") continue;
-				if (nonTypes.has(td.building.type)) c++;
+				if (smallTypes.has(td.building.type)) c++;
 			}
 			return c;
 		};
 		const MAX_WAIT_MS = 5 * 60 * 1000;
 		const POLL_MS = 1000;
 		let waited = 0;
-		const before = countCompletedNon();
+		const beforeSmall = countCompletedSmall();
 		while (true) {
 			await new Promise((r) => setTimeout(r, POLL_MS));
 			waited += POLL_MS;
-			const after = countCompletedNon();
-			if (after - before >= nonPlacedTotal) break;
+			const after = countCompletedSmall();
+			if (after - beforeSmall >= smallPlacedTotal) break;
 			if (waited >= MAX_WAIT_MS) break;
 		}
 	}
 
-	// Ensure a CoalPowerPlant at start of electrified block and then place electrified buildings
-	const electStartY = 24; // index 24 == row 25
-	const electEndY = Math.floor(mapMaxY);
-	const filteredElect = electSpecs.filter((s) => s.type !== ("CoalPowerPlant" as Building));
-	const electWithCoal = [{ type: "CoalPowerPlant" as Building, count: 1, targetLevel: 15 }, ...filteredElect];
-	const electPlacement = buildBuildingsInRange(minX, maxX, electStartY, electEndY, electWithCoal);
-
-	// Wait until electrified placements are completed (or timeout)
-	const electTypes = new Set(electWithCoal.map((s) => s.type));
-	const electPlacedTotal = electPlacement.results.reduce((acc, r) => acc + (r.placed ?? 0), 0);
-	if (electPlacedTotal > 0) {
-		const countCompletedElect = (): number => {
-			const s = getGameState();
-			let c = 0;
-			for (const [xy, td] of s.tiles.entries()) {
-				if (!td || !td.building) continue;
-				if (td.building.status !== "completed") continue;
-				if (electTypes.has(td.building.type)) c++;
-			}
-			return c;
-		};
-		const MAX_WAIT_MS2 = 5 * 60 * 1000;
-		const POLL_MS2 = 1000;
-		let waited2 = 0;
-		const before2 = countCompletedElect();
-		while (true) {
-			await new Promise((r) => setTimeout(r, POLL_MS2));
-			waited2 += POLL_MS2;
-			const after2 = countCompletedElect();
-			if (after2 - before2 >= electPlacedTotal) break;
-			if (waited2 >= MAX_WAIT_MS2) break;
-		}
-	}
-
-	// ------------------------------------------------------------------
-	// Left-most 20-tile strip bulk placements (end of routine)
-	// ------------------------------------------------------------------
-	// Build 350 x CivGPT, 350 x Peacekeeper, 200 x SpaceCenter in the
-	// left-most 20-tile strip starting at the top of the map. Use the
-	// existing chunked approach so placement waits for completion like
-	// the other deploy helpers.
-
-	// Compute map bounds including minX
-	let mapMinX = Number.POSITIVE_INFINITY;
-	// (mapMaxX and mapMaxY were computed earlier in this function)
-	for (const xy of gs.tiles.keys()) {
-		const p = tileToPoint(xy);
-		if (p.x < mapMinX) mapMinX = p.x;
-	}
-	if (mapMinX === Number.POSITIVE_INFINITY) {
-		ensureVisualRefresh();
-		return { removedCloneLabs: removed, cleared, smallRowPlacement: { results: smallRowPlacement.results }, nonElectPlacement: { results: nonElectPlacement.results }, electPlacement: { results: electPlacement.results }, leftStripPlacement: [] };
-	}
-
-	const leftMinX = Math.max(0, Math.floor(mapMinX));
-	const leftMaxX = Math.min(Math.floor(mapMaxX), leftMinX + 19);
-	const leftMinY = 0;
-	const leftMaxY = Math.floor(mapMaxY);
-
-	const LEFT_CHUNK = 100;
-	const leftPlan: Array<{ type: Building; total: number }> = [
-		{ type: ("CivGPT" as Building), total: 350 },
-		{ type: ("Peacekeeper" as Building), total: 350 },
-		{ type: ("SpaceCenter" as Building), total: 200 },
-	];
-
-	const leftResults: Array<{ type: Building; requested: number; placed: number; remaining: number }> = [];
-
-	// Place each left-strip building in a single call (no chunking required)
-	for (const item of leftPlan) {
-		const res = buildBuildingsInRange(leftMinX, leftMaxX, leftMinY, leftMaxY, [
-			{ type: item.type, count: item.total, targetLevel: 10 },
-		]);
-		const placed = res.results.length > 0 ? res.results[0].placed : 0;
-		leftResults.push({ type: item.type, requested: item.total, placed, remaining: Math.max(0, item.total - placed) });
-	}
-
 	ensureVisualRefresh();
+	// Present a compact toast summary for the user
+	try {
+		const smallSummary = smallRowPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+		showToast(`Dyson Plan 1 complete: removedCloneLabs ${removed}; cleared ${cleared?.cleared ?? 0}; smallRow: ${smallSummary}`);
+	} catch (e) {
+		// swallowing toast errors to avoid breaking game logic
+		console.error("showToast failed in dysonBuildPlan1:", e);
+	}
 	return {
 		removedCloneLabs: removed,
 		cleared,
 		smallRowPlacement: { results: smallRowPlacement.results },
-		nonElectPlacement: { results: nonElectPlacement.results },
-		electPlacement: { results: electPlacement.results },
-		leftStripPlacement: leftResults,
+		nonElectPlacement: null,
+		electPlacement: null,
+		leftStripPlacement: [],
 	};
 }
+
+/**
+ * dysonBuildPlan2
+ *
+ * - Place the provided postPizzeriaPlan into the rightmost 10-tile band
+ *   starting at row 9 (index 8) and spanning 12 rows (indexes 8..19 or
+ *   clamped to map height).
+ */
+export async function dysonBuildPlan2(): Promise<{
+	placement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+	message?: string;
+}> {
+	const gs = getGameState();
+
+	// Determine map bounds
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+
+	if (mapMaxX === Number.NEGATIVE_INFINITY) {
+		return { placement: null, message: "No map tiles available" };
+	}
+
+	const maxX = Math.floor(mapMaxX);
+	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+	// Row 9 -> index 8, take 12 rows -> indexes 8..19
+	const startY = 8;
+	const endY = Math.min(Math.floor(mapMaxY), startY + 11);
+
+	const postPizzeriaPlan: Array<{ type: Building; count: number }> = [
+		{ type: ("Sandpit" as Building), count: 1 },
+		{ type: ("Brewery" as Building), count: 1 },
+		{ type: ("CableFactory" as Building), count: 3 },
+		{ type: ("DairyFarm" as Building), count: 1 },
+		{ type: ("FlourMill" as Building), count: 1 },
+		{ type: ("Glassworks" as Building), count: 2 },
+		{ type: ("GunpowderMill" as Building), count: 1 },
+		{ type: ("IronForge" as Building), count: 1 },
+		{ type: ("OilRefinery" as Building), count: 8 },
+		{ type: ("PaperMaker" as Building), count: 1 },
+		{ type: ("PlasticsFactory" as Building), count: 3 },
+		{ type: ("PoetrySchool" as Building), count: 1 },
+		{ type: ("PoultryFarm" as Building), count: 1 },
+		{ type: ("Stable" as Building), count: 1 },
+		{ type: ("SteelMill" as Building), count: 3 },
+		{ type: ("DynamiteWorkshop" as Building), count: 3 },
+		{ type: ("FurnitureWorkshop" as Building), count: 1 },
+		{ type: ("LensWorkshop" as Building), count: 1 },
+		{ type: ("MusiciansGuild" as Building), count: 1 },
+		{ type: ("RifleFactory" as Building), count: 1 },
+		{ type: ("Shrine" as Building), count: 1 },
+		{ type: ("Steamworks" as Building), count: 1 },
+		{ type: ("PaintersGuild" as Building), count: 1 },
+		{ type: ("ActorsGuild" as Building), count: 5 },
+		{ type: ("BiplaneFactory" as Building), count: 1 },
+		{ type: ("GatlingGunFactory" as Building), count: 2 },
+		{ type: ("LocomotiveFactory" as Building), count: 8 },
+		{ type: ("Museum" as Building), count: 3 },
+		{ type: ("Pizzeria" as Building), count: 1 },
+		{ type: ("University" as Building), count: 4 },
+		{ type: ("Parliament" as Building), count: 3 },
+		{ type: ("PrintingHouse" as Building), count: 7 },
+		{ type: ("ArtilleryFactory" as Building), count: 2 },
+		{ type: ("Courthouse" as Building), count: 3 },
+		{ type: ("PublishingHouse" as Building), count: 5 },
+		{ type: ("Stadium" as Building), count: 5 },
+		{ type: ("MagazinePublisher" as Building), count: 8 },
+		{ type: ("Embassy" as Building), count: 10 },
+	];
+
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	// Aggregate requested counts and track placed counts
+	const summaryMap = new Map<string, { type: Building; requested: number; placed: number }>();
+	for (const p of postPizzeriaPlan) summaryMap.set(p.type, { type: p.type, requested: p.count, placed: 0 });
+
+	// Filter out any unknown building types to avoid runtime errors when
+	// other code attempts to read building definitions (e.g. Config.Building[...].special).
+	const validPlan = postPizzeriaPlan.filter((p) => {
+		try {
+			return !!Config.Building[p.type];
+		} catch (e) {
+			return false;
+		}
+	});
+
+	// Place one building at a time with a 200ms gap between placements.
+	for (const spec of validPlan) {
+		for (let i = 0; i < spec.count; i++) {
+			let res: { results: Array<{ type: Building; requested: number; placed: number }>; skippedWonders: number; skippedMines: number } | undefined;
+			try {
+				res = buildBuildingsInRange(minX, maxX, startY, endY, [
+					{ type: spec.type, count: 1, targetLevel: 10 },
+				]);
+			} catch (e) {
+				console.error("dysonBuildPlan2: placement failed for", spec.type, e);
+				break; // stop trying this type
+			}
+			const placed = res.results.length > 0 ? res.results[0].placed : 0;
+			const entry = summaryMap.get(spec.type);
+			if (entry) entry.placed += placed;
+			// If nothing could be placed, abort remaining placements for this type
+			if (placed === 0) break;
+			// Wait 200ms between placements so the UI has time to show incremental progress
+			await sleep(200);
+		}
+	}
+
+	const results = Array.from(summaryMap.values());
+	return { placement: { results } };
+}
+
+/**
+ * dysonBuildPlan4
+ *
+ * - Build the leftPlan in the LEFT-most 20-tile-wide strip starting at the
+ *   top row (y=0). Large totals are placed in chunks and we wait for each
+ *   chunk to complete like other bulk builders.
+ */
+export async function dysonBuildPlan4(): Promise<{
+	leftStripPlacement: Array<{ type: Building; requested: number; placed: number; remaining: number }>;
+	message?: string;
+}> {
+	const gs = getGameState();
+
+	// Determine map bounds (we need minX for left-hand edge and maxY)
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMinX = Number.POSITIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.x < mapMinX) mapMinX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+	if (mapMaxX === Number.NEGATIVE_INFINITY || mapMinX === Number.POSITIVE_INFINITY) {
+		return { leftStripPlacement: [], message: "No map tiles available" };
+	}
+
+	// LEFT-hand 20-tile-wide strip
+	const minX = Math.max(0, Math.floor(mapMinX));
+	const maxX = Math.min(Math.floor(mapMaxX), minX + 19);
+	const minY = 0;
+	const maxY = Math.floor(mapMaxY);
+
+	const leftPlan: Array<{ type: Building; total: number }> = [
+		{ type: ("CivGPT" as Building), total: 300 },
+		{ type: ("Peacekeeper" as Building), total: 300 },
+		{ type: ("SpaceCenter" as Building), total: 200 },
+	];
+
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	const results: Array<{ type: Building; requested: number; placed: number; remaining: number }> = [];
+
+	// Build one-by-one with 200ms gap between placements (matches dysonBuildPlan2/3)
+	for (const item of leftPlan) {
+		const summaryEntry = { type: item.type, requested: item.total, placed: 0, remaining: item.total };
+		for (let i = 0; i < item.total; i++) {
+			// Defensive: skip unknown building types
+			try {
+				if (!Config.Building[item.type]) {
+					console.warn("dysonBuildPlan4: unknown building type, skipping:", item.type);
+					break;
+				}
+			} catch (e) {
+				console.warn("dysonBuildPlan4: Config check failed for", item.type, e);
+				break;
+			}
+
+			let res: { results: Array<{ type: Building; requested: number; placed: number }>; skippedWonders: number; skippedMines: number } | undefined;
+			try {
+				res = buildBuildingsInRange(minX, maxX, minY, maxY, [ { type: item.type, count: 1, targetLevel: 10 } ]);
+			} catch (e) {
+				console.error("dysonBuildPlan4: placement failed for", item.type, e);
+				break;
+			}
+
+			const placed = res.results.length > 0 ? res.results[0].placed : 0;
+			summaryEntry.placed += placed;
+			summaryEntry.remaining -= placed;
+			if (placed === 0) break; // no progress
+
+			// small delay so the UI shows incremental progress
+			await sleep(200);
+		}
+
+		results.push(summaryEntry);
+	}
+
+	ensureVisualRefresh();
+	try {
+		const summary = results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+		showToast(`Dyson Plan 4 complete: ${summary}`);
+	} catch (e) {
+		console.error("showToast failed in dysonBuildPlan4:", e);
+	}
+	return { leftStripPlacement: results };
+}
+
+/**
+ * dysonBuildPlan3
+ *
+ * - Place the provided high-tech / electrified `plan` into the rightmost
+ *   10-tile band starting at row 25 (index 24) and spanning 10 rows
+ *   (indexes 24..33 clamped to map height).
+ */
+export async function dysonBuildPlan3(): Promise<{
+	placement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+	message?: string;
+}> {
+	const gs = getGameState();
+
+	// Determine map bounds
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+
+	if (mapMaxX === Number.NEGATIVE_INFINITY) {
+		return { placement: null, message: "No map tiles available" };
+	}
+
+	const maxX = Math.floor(mapMaxX);
+	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+	// Row 25 -> index 24, take 10 rows -> indexes 24..33
+	const startY = 24;
+	const endY = Math.min(Math.floor(mapMaxY), startY + 9);
+
+	const plan: Array<{ type: Building; count: number }> = [
+		{ type: ("SiliconSmelter" as Building), count: 1 },
+	{ type: ("OpticalFiberFactory" as Building), count: 6 },
+		{ type: ("SemiconductorFab" as Building), count: 2 },
+		{ type: ("AtomicFacility" as Building), count: 3 },
+		{ type: ("CarFactory" as Building), count: 4 },
+		{ type: ("ComputerFactory" as Building), count: 6 },
+		{ type: ("AirplaneFactory" as Building), count: 6 },
+		{ type: ("InternetServiceProvider" as Building), count: 10 },
+		{ type: ("SoftwareCompany" as Building), count: 5 },
+		{ type: ("SupercomputerLab" as Building), count: 20 },
+		{ type: ("MaglevFactory" as Building), count: 6 },
+		{ type: ("RocketFactory" as Building), count: 5 },
+		{ type: ("NuclearMissileSilo" as Building), count: 20 },
+		{ type: ("RadioStation" as Building), count: 18 },
+	];
+
+	// We'll place buildings one-by-one with a small delay so the user
+	// can observe them being created. This mirrors dysonBuildPlan2.
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	// Ensure a CoalPowerPlant exists at the start of the electrified block
+	let coalExists = false;
+	for (const [xy, td] of gs.tiles.entries()) {
+		if (!td || !td.building) continue;
+		const pt = tileToPoint(xy);
+		if (pt.x < minX || pt.x > maxX || pt.y < startY || pt.y > endY) continue;
+		if (td.building.type === ("CoalPowerPlant" as Building)) { coalExists = true; break; }
+	}
+	if (!coalExists) {
+		// place coal at first empty tile in the block
+		let placedCoal = false;
+		for (let y = startY; y <= endY && !placedCoal; y++) {
+			for (let x = minX; x <= maxX && !placedCoal; x++) {
+				const xy = pointToTile({ x, y });
+				const td = gs.tiles.get(xy);
+				if (!td) continue;
+				if (!td.building) {
+					const b = makeBuilding({ type: "CoalPowerPlant" as Building, level: 0, desiredLevel: 10 });
+					td.building = b;
+					placedCoal = true;
+				}
+			}
+		}
+		if (placedCoal) { clearTransportSourceCache(); ensureVisualRefresh(); }
+	}
+
+	// Build one-by-one with 200ms gap; collect summary like plan2
+	const summaryMap = new Map<string, { type: Building; requested: number; placed: number }>();
+	for (const p of plan) summaryMap.set(p.type, { type: p.type, requested: p.count, placed: 0 });
+
+	const validPlan = plan.filter((p) => {
+		try { return !!Config.Building[p.type]; } catch (e) { return false; }
+	});
+
+	for (const spec of validPlan) {
+		for (let i = 0; i < spec.count; i++) {
+			let res: { results: Array<{ type: Building; requested: number; placed: number }>; skippedWonders: number; skippedMines: number } | undefined;
+			try {
+				res = buildBuildingsInRange(minX, maxX, startY, endY, [ { type: spec.type, count: 1, targetLevel: 10 } ]);
+			} catch (e) {
+				console.error("dysonBuildPlan3: placement failed for", spec.type, e);
+				break;
+			}
+			const placed = res.results.length > 0 ? res.results[0].placed : 0;
+			const entry = summaryMap.get(spec.type);
+			if (entry) entry.placed += placed;
+			if (placed === 0) break;
+			// small delay so the UI shows incremental progress
+			await sleep(200);
+		}
+	}
+
+	const results = Array.from(summaryMap.values());
+	ensureVisualRefresh();
+	// Final summary toast (best-effort)
+	try {
+		const totalPlaced = results.reduce((acc, r) => acc + (r.placed ?? 0), 0);
+		const summary = results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+		showToast(`Dyson Plan 3 complete: placed ${totalPlaced}; ${summary}`);
+	} catch (e) {
+		console.error("showToast failed in dysonBuildPlan3:", e);
+	}
+	return { placement: { results } };
+}
+
+// buildDysonMaterials wrapper removed - callers should invoke individual
+// dysonBuildPlan1..4 functions directly. The menu was updated to expose
+// each part separately.
 
 
 

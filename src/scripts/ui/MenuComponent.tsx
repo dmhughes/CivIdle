@@ -652,6 +652,34 @@ export function MenuComponent(): React.ReactNode {
                    >
                       <MenuItem check={((gameOptions.daveScriptsRun?.BuildCloneLabs ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"009 - Build Clone Labs"}</MenuItem>
                    </div>
+                  <div
+                     className="menu-popover-item"
+                     onPointerDown={async () => {
+                        playClick();
+                        setActive(null);
+                        try {
+                           const mod = await import("../logic/davescripts");
+                           if (mod && typeof mod.buildDysonMaterials === "function") {
+                              const res = await mod.buildDysonMaterials();
+                              const opts = getGameOptions();
+                              opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                              opts.daveScriptsRun.BuildDysonMaterials = opts.rebirthInfo?.length ?? 0;
+                              notifyGameOptionsUpdate(opts);
+                              const left = (res.leftStripPlacement || []).map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+                              const non = res.nonElectPlacement ? res.nonElectPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              const elect = res.electPlacement ? res.electPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              showToast(`BuildDysonMaterials: removedCloneLabs ${res.removedCloneLabs}; cleared ${res.cleared?.cleared ?? 0}; smallRow: ${res.smallRowPlacement?.results.map(r=>`${r.type} ${r.placed}/${r.requested}`).join(", ")}; non-elect: ${non}; elect: ${elect}; left: ${left}`);
+                           } else {
+                              showToast("Dave's scripts are not available in this build.");
+                           }
+                        } catch (err) {
+                           playError();
+                           showToast(String(err));
+                        }
+                     }}
+                  >
+                     <MenuItem check={((gameOptions.daveScriptsRun?.BuildDysonMaterials ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"010 - Build Dyson Materials"}</MenuItem>
+                  </div>
                </div>
             </div>
             {isHalloween(now) ? (

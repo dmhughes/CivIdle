@@ -1,6 +1,11 @@
 import type { Building } from "../definitions/BuildingDefinitions";
+<<<<<<< HEAD
 import type { City } from "../definitions/CityDefinitions";
 import { forEach, keysOf, pointToTile, shuffle, tileToPoint, type Tile } from "../utilities/Helper";
+=======
+import { isChristmas } from "../definitions/TimedBuildingUnlock";
+import { forEach, keysOf, pointToTile, shuffle } from "../utilities/Helper";
+>>>>>>> upstream/main
 import { getServerNow } from "../utilities/ServerNow";
 import { applyBuildingDefaults, getRandomEmptyTiles, isSpecialBuilding } from "./BuildingLogic";
 import { Config } from "./Config";
@@ -113,7 +118,7 @@ export function initializeGameState(gameState: GameState, options: GameOptions) 
    const naturalWonders = keysOf(Config.City[gameState.city].naturalWonders);
 
    const now = getServerNow();
-   if (now && new Date(now).getMonth() === 11) {
+   if (now && isChristmas(new Date(now))) {
       naturalWonders.push("Lapland");
       naturalWonders.push("RockefellerCenterChristmasTree");
    }

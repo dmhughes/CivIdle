@@ -1,11 +1,7 @@
 import type { Building } from "../definitions/BuildingDefinitions";
-<<<<<<< HEAD
 import type { City } from "../definitions/CityDefinitions";
-import { forEach, keysOf, pointToTile, shuffle, tileToPoint, type Tile } from "../utilities/Helper";
-=======
 import { isChristmas } from "../definitions/TimedBuildingUnlock";
-import { forEach, keysOf, pointToTile, shuffle } from "../utilities/Helper";
->>>>>>> upstream/main
+import { forEach, keysOf, pointToTile, shuffle, tileToPoint, type Tile } from "../utilities/Helper";
 import { getServerNow } from "../utilities/ServerNow";
 import { applyBuildingDefaults, getRandomEmptyTiles, isSpecialBuilding } from "./BuildingLogic";
 import { Config } from "./Config";

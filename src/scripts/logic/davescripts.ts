@@ -1660,6 +1660,121 @@ export async function dysonBuildPlan2(): Promise<{
 	return { placement: { results } };
 }
 
+
+	/**
+	 * Alderson Disc 4
+	 *
+	 * - Delete ALL CivGPT, Peacekeeper and SpaceCenter buildings on the map.
+	 * - Clear transport caches and force visual refresh to remove artefacts.
+	 * - In the LEFT-most 20-tile-wide strip (starting at the map's left edge),
+	 *   starting at row 0, build:
+	 *     270 x CivOasis, 270 x RobocarFactory, 270 x BitcoinFactory
+	 *   Each building is created at level 0 with desiredLevel=10 and placed
+	 *   one-by-one with a 200ms wait between placements so the player can
+	 *   observe incremental progress.
+	 */
+	export async function aldersonDisc4(): Promise<{
+		removed: number;
+		leftStripPlacement: Array<{ type: Building; requested: number; placed: number; remaining: number }>;
+		message?: string;
+	}> {
+		const gs = getGameState();
+
+		// Delete all CivGPT, Peacekeeper, SpaceCenter
+		const toRemove = new Set<string>(["CivGPT", "Peacekeeper", "SpaceCenter"]);
+		let removed = 0;
+		for (const [xy, td] of gs.tiles.entries()) {
+			if (!td || !td.building) continue;
+			try {
+				if (toRemove.has(td.building.type as string)) {
+					td.building = undefined;
+					removed++;
+				}
+			} catch (e) {
+				// ignore malformed entries
+			}
+		}
+		if (removed > 0) {
+			try { clearTransportSourceCache(); } catch (e) { /* swallow */ }
+			try { ensureVisualRefresh(); } catch (e) { /* swallow */ }
+		}
+
+		// Determine left-hand 20-tile strip bounds
+		let mapMaxX = Number.NEGATIVE_INFINITY;
+		let mapMinX = Number.POSITIVE_INFINITY;
+		let mapMaxY = Number.NEGATIVE_INFINITY;
+		for (const xy of gs.tiles.keys()) {
+			const p = tileToPoint(xy);
+			if (p.x > mapMaxX) mapMaxX = p.x;
+			if (p.x < mapMinX) mapMinX = p.x;
+			if (p.y > mapMaxY) mapMaxY = p.y;
+		}
+		if (mapMaxX === Number.NEGATIVE_INFINITY || mapMinX === Number.POSITIVE_INFINITY) {
+			return { removed, leftStripPlacement: [], message: "No map tiles available" };
+		}
+
+		const minX = Math.max(0, Math.floor(mapMinX));
+		const maxX = Math.min(Math.floor(mapMaxX), minX + 19);
+		const minY = 0;
+		const maxY = Math.floor(mapMaxY);
+
+		const plan: Array<{ type: Building; total: number }> = [
+			{ type: "CivOasis" as Building, total: 270 },
+			{ type: "RobocarFactory" as Building, total: 270 },
+			{ type: "BitcoinMiner" as Building, total: 270 },
+		];
+
+		const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+		const results: Array<{ type: Building; requested: number; placed: number; remaining: number }> = [];
+
+		for (const item of plan) {
+			const summaryEntry = { type: item.type, requested: item.total, placed: 0, remaining: item.total };
+
+			// Defensive check: ensure building type exists
+			try {
+				if (!Config.Building[item.type]) {
+					console.warn("aldersonDisc4: unknown building type, skipping:", item.type);
+					results.push(summaryEntry);
+					continue;
+				}
+			} catch (e) {
+				console.warn("aldersonDisc4: Config check failed for", item.type, e);
+				results.push(summaryEntry);
+				continue;
+			}
+
+			for (let i = 0; i < item.total; i++) {
+				let res: { results: Array<{ type: Building; requested: number; placed: number }>; skippedWonders: number; skippedMines: number } | undefined;
+				try {
+					res = buildBuildingsInRange(minX, maxX, minY, maxY, [ { type: item.type, count: 1, targetLevel: 10 } ]);
+				} catch (e) {
+					console.error("aldersonDisc4: placement failed for", item.type, e);
+					break;
+				}
+
+				const placed = res && res.results.length > 0 ? res.results[0].placed : 0;
+				summaryEntry.placed += placed;
+				summaryEntry.remaining -= placed;
+				if (placed === 0) break; // no space left
+				// small delay so UI shows incremental progress
+				await sleep(200);
+			}
+
+			results.push(summaryEntry);
+		}
+
+		try { ensureVisualRefresh(); } catch (e) { console.error("ensureVisualRefresh failed in aldersonDisc4:", e); }
+		try {
+			const summary = results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+			showToast(`Alderson Disc 4 complete: removed ${removed}; ${summary}`);
+		} catch (e) {
+			console.error("showToast failed in aldersonDisc4:", e);
+		}
+
+		return { removed, leftStripPlacement: results };
+	}
+
 /**
  * dysonBuildPlan4
  *
@@ -1870,6 +1985,340 @@ export async function dysonBuildPlan3(): Promise<{
 // buildDysonMaterials wrapper removed - callers should invoke individual
 // dysonBuildPlan1..4 functions directly. The menu was updated to expose
 // each part separately.
+
+/**
+ * Alderson Disc 1
+ *
+ * - In the right-hand 10-tile strip, clear everything from row 9 to 39
+ *   (user-facing row numbers; indexes 8..38) while preserving wonders and
+ *   protected mines via clearRange.
+ * - Force visual refreshes (double notify + short tick) so no visual
+ *   artefacts remain.
+ */
+export async function aldersonDisc1(): Promise<{
+	cleared: { cleared: number; preservedWonders: number; preservedMines: number } | null;
+	message?: string;
+}> {
+	const gs = getGameState();
+
+	// Determine map bounds
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+
+	if (mapMaxX === Number.NEGATIVE_INFINITY) {
+		return { cleared: null, message: "No map tiles available" };
+	}
+
+	const maxX = Math.floor(mapMaxX);
+	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+	// Rows 9..39 -> indexes 8..38 (clamped to map height)
+	const minY = 8;
+	const maxY = Math.min(Math.floor(mapMaxY), 38);
+
+	const cleared = clearRange(minX, maxX, minY, maxY);
+
+	// Best-effort clear transport cache and force a double visual refresh
+	try {
+		clearTransportSourceCache();
+	} catch (e) {
+		// swallow
+	}
+	try {
+		ensureVisualRefresh();
+		// small tick and another refresh to avoid rendering artefacts
+		await new Promise((r) => setTimeout(r, 50));
+		ensureVisualRefresh();
+		} catch (e) {
+			console.error("ensureVisualRefresh failed in aldersonDisc1:", e);
+	}
+
+	try {
+		showToast(`Alderson Disc 1: cleared ${cleared.cleared}; preservedWonders ${cleared.preservedWonders}; preservedMines ${cleared.preservedMines}`);
+		} catch (e) {
+			console.error("showToast failed in aldersonDisc1:", e);
+	}
+
+		return { cleared };
+}
+
+/**
+ * Alderson Disc 2
+ *
+ * - Build the set of buildings which DO NOT REQUIRE electrification
+ *   into the right-hand 10-tile strip starting at row 9 (index 8).
+ * - Place buildings one-by-one with a 200ms delay so the player can
+ *   observe incremental placements. Filter unknown building types.
+ */
+export async function aldersonDisc2(): Promise<{
+	placement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+	message?: string;
+}> {
+	const gs = getGameState();
+
+	// Determine map bounds
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+	if (mapMaxX === Number.NEGATIVE_INFINITY) {
+		return { placement: null, message: "No map tiles available" };
+	}
+
+	const maxX = Math.floor(mapMaxX);
+	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+	const startY = 8; // row 9 -> index 8
+	const endY = Math.min(Math.floor(mapMaxY), Math.floor(mapMaxY));
+
+	// Building plan: aggregated counts from the provided list for non-electrified buildings
+	const plan: Array<{ type: Building; count: number }> = [
+		{ type: "Embassy" as Building, count: 10 },
+		{ type: "HedgeFund" as Building, count: 10 },
+		{ type: "Parliament" as Building, count: 8 },
+		{ type: "MutualFund" as Building, count: 16 },
+		{ type: "StockExchange" as Building, count: 4 },
+		{ type: "Courthouse" as Building, count: 6 },
+		{ type: "ForexMarket" as Building, count: 4 },
+		{ type: "ArtilleryFactory" as Building, count: 4 },
+		{ type: "University" as Building, count: 8 },
+		{ type: "GatlingGunFactory" as Building, count: 2 },
+		{ type: "Museum" as Building, count: 2 },
+		{ type: "BondMarket" as Building, count: 2 },
+		{ type: "RifleFactory" as Building, count: 2 },
+		{ type: "PaintersGuild" as Building, count: 2 },
+		{ type: "MusiciansGuild" as Building, count: 2 },
+		{ type: "FurnitureWorkshop" as Building, count: 2 },
+		{ type: "Shrine" as Building, count: 2 },
+		{ type: "Steamworks" as Building, count: 2 },
+		{ type: "DynamiteWorkshop" as Building, count: 2 },
+		{ type: "Bank" as Building, count: 2 },
+		{ type: "IronForge" as Building, count: 1 },
+		{ type: "SteelMill" as Building, count: 2 },
+		{ type: "PoetrySchool" as Building, count: 1 },
+		{ type: "PlasticsFactory" as Building, count: 3 },
+		{ type: "OilRefinery" as Building, count: 5 },
+		{ type: "PaperMaker" as Building, count: 1 },
+		{ type: "LumberMill" as Building, count: 1 },
+		{ type: "Stable" as Building, count: 1 },
+		{ type: "GunpowderMill" as Building, count: 3 },
+		{ type: "Glassworks" as Building, count: 4 },
+		{ type: "BiplaneFactory" as Building, count: 1 },
+		{ type: "LocomotiveFactory" as Building, count: 1 },
+		{ type: "CoinMint" as Building, count: 1 },
+		{ type: "PrintingHouse" as Building, count: 1 },
+		{ type: "PublishingHouse" as Building, count: 1 },
+		{ type: "MagazinePublisher" as Building, count: 1 },
+		{ type: "Stadium" as Building, count: 1 },
+		{ type: "ActorsGuild" as Building, count: 1 },
+		{ type: "CableFactory" as Building, count: 3 },
+		{ type: "Brewery" as Building, count: 1 },
+		{ type: "Sandpit" as Building, count: 1 },
+	];
+
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	// summary
+	const summaryMap = new Map<string, { type: Building; requested: number; placed: number }>();
+	for (const p of plan) summaryMap.set(p.type, { type: p.type, requested: p.count, placed: 0 });
+
+		const validPlan = plan.filter((p) => {
+			try {
+				return !!Config.Building[p.type];
+			} catch (e) {
+				return false;
+			}
+		});
+
+		// Sort by building tier ascending so lower-tier buildings are placed first.
+		// This mirrors the behavior used in buildBuildingsInRange elsewhere.
+		const sortedPlan = [...validPlan].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
+
+		for (const spec of sortedPlan) {
+		for (let i = 0; i < spec.count; i++) {
+			try {
+				const res = buildBuildingsInRange(minX, maxX, startY, endY, [ { type: spec.type, count: 1, targetLevel: 10 } ]);
+				const placed = res.results.length > 0 ? res.results[0].placed : 0;
+				const entry = summaryMap.get(spec.type);
+				if (entry) entry.placed += placed;
+				if (placed === 0) break; // no more space for this type
+				await sleep(200);
+			} catch (e) {
+				console.error("aldersonDisc2: placement failed for", spec.type, e);
+				break;
+			}
+		}
+	}
+
+	const results = Array.from(summaryMap.values());
+	try {
+		ensureVisualRefresh();
+	} catch (e) {
+		console.error("ensureVisualRefresh failed in aldersonDisc2:", e);
+	}
+	try {
+		const summary = results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+		showToast(`Alderson Disc 2 complete: ${summary}`);
+	} catch (e) {
+		console.error("showToast failed in aldersonDisc2:", e);
+	}
+
+	return { placement: { results } };
+}
+
+// Provide alias for the possibly-typo'd name the user used earlier
+export const aldersonDice2 = aldersonDisc2;
+
+/**
+ * Alderson Disc 3
+ *
+ * - Build the set of buildings which REQUIRE electrification from the
+ *   candidate list into the right-hand 10-tile strip starting at row 25
+ *   (index 24) and continuing to the bottom of the map.
+ * - Ensure the first building in the electrified block is a CoalPowerPlant.
+ * - Place buildings one-by-one with a 200ms delay, sorted by ascending
+ *   Config.BuildingTier so lower-tier buildings are placed first.
+ */
+export async function aldersonDisc3(): Promise<{
+	placement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+	message?: string;
+}> {
+	const gs = getGameState();
+
+	// Determine map bounds
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+
+	if (mapMaxX === Number.NEGATIVE_INFINITY) {
+		return { placement: null, message: "No map tiles available" };
+	}
+
+	const maxX = Math.floor(mapMaxX);
+	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+	const startY = 24; // row 25 -> index 24
+	const endY = Math.floor(mapMaxY);
+
+		// Candidate master list: only include known high-tech / electrified
+		// building types (derived from dysonBuildPlan3). We deliberately DO NOT
+		// include the non-electrified items — this plan must build only those
+		// buildings that require electrification.
+		const candidates: Array<{ type: Building; count: number }> = [
+			{ type: "SiliconSmelter" as Building, count: 1 },
+			{ type: "OpticalFiberFactory" as Building, count: 7 },
+			{ type: "SemiconductorFab" as Building, count: 2 },
+			{ type: "AtomicFacility" as Building, count: 3 },
+			{ type: "CarFactory" as Building, count: 14 },
+			{ type: "ComputerFactory" as Building, count: 6 },
+			{ type: "AirplaneFactory" as Building, count: 6 },
+			{ type: "InternetServiceProvider" as Building, count: 10 },
+			{ type: "SoftwareCompany" as Building, count: 5 },
+			{ type: "SupercomputerLab" as Building, count: 10 },
+			{ type: "MaglevFactory" as Building, count: 6 },
+			{ type: "RocketFactory" as Building, count: 5 },
+			{ type: "SatelliteFactory" as Building, count: 5 },
+			{ type: "NuclearMissileSilo" as Building, count: 12 },
+			{ type: "CivTok" as Building, count: 10 },
+			{ type: "RadioStation" as Building, count: 18 },
+		];
+
+	// Aggregate counts by type
+	const agg = new Map<string, { type: Building; requested: number }>();
+	for (const it of candidates) {
+		const key = it.type as string;
+		const prev = agg.get(key);
+		if (prev) prev.requested += it.count;
+		else agg.set(key, { type: it.type, requested: it.count });
+	}
+
+	// Filter to electrified buildings using Config.Building[...].power === true
+	const electSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
+	for (const v of agg.values()) {
+		try {
+			const def = Config.Building[v.type];
+			if (def && def.power === true) electSpecs.push({ type: v.type, count: v.requested, targetLevel: 10 });
+		} catch (e) {
+			// ignore unknown types
+		}
+	}
+
+	// Ensure CoalPowerPlant exists at start of block
+	let coalExists = false;
+	for (const [xy, td] of gs.tiles.entries()) {
+		if (!td || !td.building) continue;
+		const pt = tileToPoint(xy);
+		if (pt.x < minX || pt.x > maxX || pt.y < startY || pt.y > endY) continue;
+		if (td.building.type === ("CoalPowerPlant" as Building)) { coalExists = true; break; }
+	}
+	if (!coalExists) {
+		let placedCoal = false;
+		for (let y = startY; y <= endY && !placedCoal; y++) {
+			for (let x = minX; x <= maxX && !placedCoal; x++) {
+				const xy = pointToTile({ x, y });
+				const td = gs.tiles.get(xy);
+				if (!td) continue;
+				if (!td.building) {
+					const b = makeBuilding({ type: "CoalPowerPlant" as Building, level: 0, desiredLevel: 10 });
+					td.building = b;
+					placedCoal = true;
+				}
+			}
+		}
+		if (placedCoal) { clearTransportSourceCache(); ensureVisualRefresh(); }
+	}
+
+	// Prepare summary map
+	const summaryMap = new Map<string, { type: Building; requested: number; placed: number }>();
+	for (const s of electSpecs) summaryMap.set(s.type, { type: s.type, requested: s.count, placed: 0 });
+
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	// Filter unknown defs and sort by tier ascending
+	const validPlan = electSpecs.filter((p) => {
+		try { return !!Config.Building[p.type]; } catch (e) { return false; }
+	});
+	const sortedPlan = [...validPlan].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
+
+	for (const spec of sortedPlan) {
+		for (let i = 0; i < spec.count; i++) {
+			try {
+				const res = buildBuildingsInRange(minX, maxX, startY, endY, [{ type: spec.type, count: 1, targetLevel: 10 }]);
+				const placed = res.results.length > 0 ? res.results[0].placed : 0;
+				const entry = summaryMap.get(spec.type);
+				if (entry) entry.placed += placed;
+				if (placed === 0) break;
+				await sleep(200);
+			} catch (e) {
+				console.error("aldersonDisc3: placement failed for", spec.type, e);
+				break;
+			}
+		}
+	}
+
+	const results = Array.from(summaryMap.values());
+	try { ensureVisualRefresh(); } catch (e) { console.error("ensureVisualRefresh failed in aldersonDisc3:", e); }
+	try {
+		const summary = results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+		showToast(`Alderson Disc 3 complete: ${summary}`);
+	} catch (e) {
+		console.error("showToast failed in aldersonDisc3:", e);
+	}
+
+	return { placement: { results } };
+}
 
 
 

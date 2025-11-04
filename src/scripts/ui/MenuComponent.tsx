@@ -663,6 +663,8 @@ export function MenuComponent(): React.ReactNode {
                    >
                       <MenuItem check={((gameOptions.daveScriptsRun?.BuildCloneLabs ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"009 - Build Clone Labs"}</MenuItem>
                    </div>
+                 
+ 
                   <div
                      className="menu-popover-item"
                      onPointerDown={async () => {
@@ -769,9 +771,121 @@ export function MenuComponent(): React.ReactNode {
                      }}
                   >
                      <MenuItem check={((gameOptions.daveScriptsRun?.DysonPart4 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Dyson Part 4"}</MenuItem>
+                     </div>
+
+                     {/* Alderson Disc items at the end in order 1..4 */}
+                     <div
+                        className="menu-popover-item"
+                        onPointerDown={async () => {
+                           playClick();
+                           setActive(null);
+                           try {
+                              const mod = await import("../logic/davescripts");
+                              if (mod && typeof mod.aldersonDisc1 === "function") {
+                                 const res = await mod.aldersonDisc1();
+                                 const opts = getGameOptions();
+                                 opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                 opts.daveScriptsRun.AldersonDisc1 = opts.rebirthInfo?.length ?? 0;
+                                 notifyGameOptionsUpdate(opts);
+                                 showToast(`Alderson Disc 1: cleared ${res.cleared?.cleared ?? 0}; preservedWonders ${res.cleared?.preservedWonders ?? 0}; preservedMines ${res.cleared?.preservedMines ?? 0}`);
+                              } else {
+                                 showToast("Dave's scripts are not available in this build.");
+                              }
+                           } catch (err) {
+                              playError();
+                              showToast(String(err));
+                           }
+                        }}
+                     >
+                        <MenuItem check={((gameOptions.daveScriptsRun?.AldersonDisc1 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Alderson Disc 1"}</MenuItem>
+                     </div>
+
+                     <div
+                        className="menu-popover-item"
+                        onPointerDown={async () => {
+                           playClick();
+                           setActive(null);
+                           try {
+                              const mod = await import("../logic/davescripts");
+                              const fn = typeof mod.aldersonDisc2 === "function" ? mod.aldersonDisc2 : typeof mod.aldersonDice2 === "function" ? mod.aldersonDice2 : null;
+                              if (fn) {
+                                 const res = await fn();
+                                 const opts = getGameOptions();
+                                 opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                 opts.daveScriptsRun.AldersonDisc2 = opts.rebirthInfo?.length ?? 0;
+                                 notifyGameOptionsUpdate(opts);
+                                 const summary = res.placement ? res.placement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                                 showToast(`Alderson Disc 2 complete: ${summary}`);
+                              } else {
+                                 showToast("Dave's scripts are not available in this build.");
+                              }
+                           } catch (err) {
+                              playError();
+                              showToast(String(err));
+                           }
+                        }}
+                     >
+                        <MenuItem check={((gameOptions.daveScriptsRun?.AldersonDisc2 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Alderson Disc 2"}</MenuItem>
+                     </div>
+
+                     <div
+                        className="menu-popover-item"
+                        onPointerDown={async () => {
+                           playClick();
+                           setActive(null);
+                           try {
+                              const mod = await import("../logic/davescripts");
+                              const fn = typeof mod.aldersonDisc3 === "function" ? mod.aldersonDisc3 : null;
+                              if (fn) {
+                                 const res = await fn();
+                                 const opts = getGameOptions();
+                                 opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                 opts.daveScriptsRun.AldersonDisc3 = opts.rebirthInfo?.length ?? 0;
+                                 notifyGameOptionsUpdate(opts);
+                                 const summary = res.placement ? res.placement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                                 showToast(`Alderson Disc 3 complete: ${summary}`);
+                              } else {
+                                 showToast("Dave's scripts are not available in this build.");
+                              }
+                           } catch (err) {
+                              playError();
+                              showToast(String(err));
+                           }
+                        }}
+                     >
+                        <MenuItem check={((gameOptions.daveScriptsRun?.AldersonDisc3 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Alderson Disc 3"}</MenuItem>
+                     </div>
+
+                     <div
+                        className="menu-popover-item"
+                        onPointerDown={async () => {
+                           playClick();
+                           setActive(null);
+                           try {
+                              const mod = await import("../logic/davescripts");
+                              const fn = typeof mod.aldersonDisc4 === "function" ? mod.aldersonDisc4 : null;
+                              if (fn) {
+                                 const res = await fn();
+                                 const opts = getGameOptions();
+                                 opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                 opts.daveScriptsRun.AldersonDisc4 = opts.rebirthInfo?.length ?? 0;
+                                 notifyGameOptionsUpdate(opts);
+                                 const summary = res.leftStripPlacement ? res.leftStripPlacement.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                                 showToast(`Alderson Disc 4 complete: removed ${res.removed ?? 0}; ${summary}`);
+                              } else {
+                                 showToast("Dave's scripts are not available in this build.");
+                              }
+                           } catch (err) {
+                              playError();
+                              showToast(String(err));
+                           }
+                        }}
+                     >
+                        <MenuItem check={((gameOptions.daveScriptsRun?.AldersonDisc4 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Alderson Disc 4"}</MenuItem>
+                     </div>
+
                   </div>
                </div>
-            </div>
             {isHalloween(now) ? (
                <img
                   src={SpiderWeb}

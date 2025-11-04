@@ -884,6 +884,116 @@ export function MenuComponent(): React.ReactNode {
                         <MenuItem check={((gameOptions.daveScriptsRun?.AldersonDisc4 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Alderson Disc 4"}</MenuItem>
                      </div>
 
+                     {/* Large Hadron Collider items 1..4 */}
+                     <div
+                        className="menu-popover-item"
+                        onPointerDown={async () => {
+                           playClick();
+                           setActive(null);
+                           try {
+                              const mod = await import("../logic/davescripts");
+                              const fn = typeof mod.largeHadronCollider1 === "function" ? mod.largeHadronCollider1 : null;
+                              if (fn) {
+                                 const res = await fn();
+                                 const opts = getGameOptions();
+                                 opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                 opts.daveScriptsRun.LargeHadronCollider1 = opts.rebirthInfo?.length ?? 0;
+                                 notifyGameOptionsUpdate(opts);
+                                 const cleared = res.cleared ? `${res.cleared.cleared} cleared` : "none";
+                                 showToast(`LHC 1 complete: removed ${res.removed}; ${cleared}`);
+                              } else {
+                                 showToast("Dave's scripts are not available in this build.");
+                              }
+                           } catch (err) {
+                              playError();
+                              showToast(String(err));
+                           }
+                        }}
+                     >
+                        <MenuItem check={((gameOptions.daveScriptsRun?.LargeHadronCollider1 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Large Hadron Collider 1"}</MenuItem>
+                     </div>
+
+                     <div
+                        className="menu-popover-item"
+                        onPointerDown={async () => {
+                           playClick();
+                           setActive(null);
+                           try {
+                              const mod = await import("../logic/davescripts");
+                              if (mod && typeof mod.largeHadronCollider2 === "function") {
+                                 const res = await mod.largeHadronCollider2();
+                                 const opts = getGameOptions();
+                                 opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                 opts.daveScriptsRun.LargeHadronCollider2 = opts.rebirthInfo?.length ?? 0;
+                                 notifyGameOptionsUpdate(opts);
+                                 const summary = res.placement ? res.placement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                                 showToast(`LHC 2 complete: ${summary}`);
+                              } else {
+                                 showToast("Dave's scripts are not available in this build.");
+                              }
+                           } catch (err) {
+                              playError();
+                              showToast(String(err));
+                           }
+                        }}
+                     >
+                        <MenuItem check={((gameOptions.daveScriptsRun?.LargeHadronCollider2 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Large Hadron Collider 2"}</MenuItem>
+                     </div>
+
+                     <div
+                        className="menu-popover-item"
+                        onPointerDown={async () => {
+                           playClick();
+                           setActive(null);
+                           try {
+                              const mod = await import("../logic/davescripts");
+                              if (mod && typeof mod.largeHadronCollider3 === "function") {
+                                 const res = await mod.largeHadronCollider3();
+                                 const opts = getGameOptions();
+                                 opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                 opts.daveScriptsRun.LargeHadronCollider3 = opts.rebirthInfo?.length ?? 0;
+                                 notifyGameOptionsUpdate(opts);
+                                 const summary = res.placement ? res.placement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                                 showToast(`LHC 3 complete: ${summary}`);
+                              } else {
+                                 showToast("Dave's scripts are not available in this build.");
+                              }
+                           } catch (err) {
+                              playError();
+                              showToast(String(err));
+                           }
+                        }}
+                     >
+                        <MenuItem check={((gameOptions.daveScriptsRun?.LargeHadronCollider3 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Large Hadron Collider 3"}</MenuItem>
+                     </div>
+
+                     <div
+                        className="menu-popover-item"
+                        onPointerDown={async () => {
+                           playClick();
+                           setActive(null);
+                           try {
+                              const mod = await import("../logic/davescripts");
+                              if (mod && typeof mod.largeHadronCollider4 === "function") {
+                                 const res = await mod.largeHadronCollider4();
+                                 const opts = getGameOptions();
+                                 opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                 opts.daveScriptsRun.LargeHadronCollider4 = opts.rebirthInfo?.length ?? 0;
+                                 notifyGameOptionsUpdate(opts);
+                                 const summary = res.leftStripPlacement ? res.leftStripPlacement.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                                 showToast(`LHC 4 complete: removed ${res.removed ?? 0}; ${summary}`);
+                              } else {
+                                 showToast("Dave's scripts are not available in this build.");
+                              }
+                           } catch (err) {
+                              playError();
+                              showToast(String(err));
+                           }
+                        }}
+                     >
+                        <MenuItem check={((gameOptions.daveScriptsRun?.LargeHadronCollider4 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Large Hadron Collider 4"}</MenuItem>
+                     </div>
+
                   </div>
                </div>
             {isHalloween(now) ? (

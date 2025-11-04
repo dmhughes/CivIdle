@@ -1775,6 +1775,309 @@ export async function dysonBuildPlan2(): Promise<{
 		return { removed, leftStripPlacement: results };
 	}
 
+	/**
+	 * Large Hadron Collider - Part 1
+	 *
+	 * - Delete ALL CivOasis, RobocarFactory and BitcoinMiner across the map.
+	 * - Clear the right-hand 10-tile-wide strip rows 9..39 (indexes 8..38),
+	 *   preserving wonders and protected mines via clearRange.
+	 */
+	export async function largeHadronCollider1(): Promise<{
+		removed: number;
+		cleared: { cleared: number; preservedWonders: number; preservedMines: number } | null;
+		message?: string;
+	}> {
+		const gs = getGameState();
+
+		// Delete all CivOasis, RobocarFactory, BitcoinMiner across the map
+		const toRemove = new Set<string>(["CivOasis", "RobocarFactory", "BitcoinMiner"]);
+		let removed = 0;
+		for (const [xy, td] of gs.tiles.entries()) {
+			if (!td || !td.building) continue;
+			try {
+				if (toRemove.has(td.building.type as string)) {
+					td.building = undefined;
+					removed++;
+				}
+			} catch (e) {
+				// ignore malformed entries
+			}
+		}
+		if (removed > 0) {
+			try { clearTransportSourceCache(); } catch (e) { /* swallow */ }
+			try { ensureVisualRefresh(); } catch (e) { /* swallow */ }
+		}
+
+		// Determine right-hand 10-tile band bounds and row range 9..39 -> indexes 8..38
+		let mapMaxX = Number.NEGATIVE_INFINITY;
+		let mapMaxY = Number.NEGATIVE_INFINITY;
+		for (const xy of gs.tiles.keys()) {
+			const p = tileToPoint(xy);
+			if (p.x > mapMaxX) mapMaxX = p.x;
+			if (p.y > mapMaxY) mapMaxY = p.y;
+		}
+		if (mapMaxX === Number.NEGATIVE_INFINITY) {
+			return { removed, cleared: null, message: "No map tiles available" };
+		}
+
+		const maxX = Math.floor(mapMaxX);
+		const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+		const minY = 8; // row 9 -> index 8
+		const maxY = Math.min(Math.floor(mapMaxY), 38);
+
+		const cleared = clearRange(minX, maxX, minY, maxY);
+
+		// Best-effort clear transport cache and force a double visual refresh
+		try { clearTransportSourceCache(); } catch (e) { /* swallow */ }
+		try {
+			ensureVisualRefresh();
+			await new Promise((r) => setTimeout(r, 50));
+			ensureVisualRefresh();
+		} catch (e) {
+			console.error("ensureVisualRefresh failed in largeHadronCollider1:", e);
+		}
+
+		try {
+			showToast(`Large Hadron Collider 1: removed ${removed}; cleared ${cleared.cleared}; preservedWonders ${cleared.preservedWonders}; preservedMines ${cleared.preservedMines}`);
+		} catch (e) {
+			console.error("showToast failed in largeHadronCollider1:", e);
+		}
+
+		return { removed, cleared };
+	}
+
+	/**
+	 * Large Hadron Collider - Part 2
+	 *
+	 * - Build the set of buildings from the user-supplied list which DO NOT
+	 *   REQUIRE electrification into the right-hand 10-tile strip starting
+	 *   at row 9 (index 8).
+	 * - Places buildings one-by-one with a 200ms delay so the player can
+	 *   observe incremental placements. Unknown building types are skipped.
+	 */
+	export async function largeHadronCollider2(): Promise<{
+		placement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+		message?: string;
+	}> {
+		const gs = getGameState();
+
+		// Determine map bounds
+		let mapMaxX = Number.NEGATIVE_INFINITY;
+		let mapMaxY = Number.NEGATIVE_INFINITY;
+		for (const xy of gs.tiles.keys()) {
+			const p = tileToPoint(xy);
+			if (p.x > mapMaxX) mapMaxX = p.x;
+			if (p.y > mapMaxY) mapMaxY = p.y;
+		}
+		if (mapMaxX === Number.NEGATIVE_INFINITY) {
+			return { placement: null, message: "No map tiles available" };
+		}
+
+		const maxX = Math.floor(mapMaxX);
+		const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+		const startY = 8; // row 9 -> index 8
+		const endY = Math.min(Math.floor(mapMaxY), Math.floor(mapMaxY));
+
+		// Non-electrified building plan extracted from the user's construct_building list
+		const plan: Array<{ type: Building; count: number }> = [
+			{ type: "HedgeFund" as Building, count: 40 },
+			{ type: "CoalPowerPlant" as Building, count: 1 },
+			{ type: "Parliament" as Building, count: 10 },
+			{ type: "MutualFund" as Building, count: 10 },
+			{ type: "StockExchange" as Building, count: 5 },
+			{ type: "ForexMarket" as Building, count: 5 },
+			{ type: "BondMarket" as Building, count: 5 },
+			{ type: "Bank" as Building, count: 5 },
+			{ type: "CoinMint" as Building, count: 3 },
+			{ type: "University" as Building, count: 10 },
+			{ type: "Museum" as Building, count: 3 },
+			{ type: "PaintersGuild" as Building, count: 3 },
+			{ type: "MusiciansGuild" as Building, count: 3 },
+			{ type: "Shrine" as Building, count: 2 },
+			{ type: "PoetrySchool" as Building, count: 2 },
+			{ type: "PlasticsFactory" as Building, count: 4 },
+			{ type: "PaperMaker" as Building, count: 1 },
+			{ type: "Stable" as Building, count: 1 },
+			{ type: "Glassworks" as Building, count: 3 },
+			{ type: "CableFactory" as Building, count: 3 },
+			{ type: "Brewery" as Building, count: 1 },
+			{ type: "Sandpit" as Building, count: 1 },
+			{ type: "Courthouse" as Building, count: 1 },
+		];
+
+		const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+		// summary map
+		const summaryMap = new Map<string, { type: Building; requested: number; placed: number }>();
+		for (const p of plan) summaryMap.set(p.type, { type: p.type, requested: p.count, placed: 0 });
+
+		// Filter unknown building types and sort by tier ascending
+		const validPlan = plan.filter((p) => {
+			try { return !!Config.Building[p.type]; } catch (e) { return false; }
+		});
+		const sortedPlan = [...validPlan].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
+
+		for (const spec of sortedPlan) {
+			for (let i = 0; i < spec.count; i++) {
+				try {
+					const res = buildBuildingsInRange(minX, maxX, startY, endY, [{ type: spec.type, count: 1, targetLevel: 10 }]);
+					const placed = res.results.length > 0 ? res.results[0].placed : 0;
+					const entry = summaryMap.get(spec.type);
+					if (entry) entry.placed += placed;
+					if (placed === 0) break; // no more space for this type
+					await sleep(200);
+				} catch (e) {
+					console.error("largeHadronCollider2: placement failed for", spec.type, e);
+					break;
+				}
+			}
+		}
+
+		const results = Array.from(summaryMap.values());
+		try { ensureVisualRefresh(); } catch (e) { console.error("ensureVisualRefresh failed in largeHadronCollider2:", e); }
+		try {
+			const summary = results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+			showToast(`Large Hadron Collider 2 complete: ${summary}`);
+		} catch (e) {
+			console.error("showToast failed in largeHadronCollider2:", e);
+		}
+
+		return { placement: { results } };
+	}
+
+	/**
+	 * Large Hadron Collider - Part 3
+	 *
+	 * - Build the set of buildings from the user-supplied list which DO
+	 *   REQUIRE electrification into the right-hand 10-tile strip starting
+	 *   at row 25 (index 24).
+	 * - Ensure the first building in the block is a CoalPowerPlant.
+	 * - Place buildings one-by-one with a 200ms delay so the player can
+	 *   observe incremental placements. Unknown building types are skipped.
+	 */
+	export async function largeHadronCollider3(): Promise<{
+		placement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+		message?: string;
+	}> {
+		const gs = getGameState();
+
+		// Determine map bounds
+		let mapMaxX = Number.NEGATIVE_INFINITY;
+		let mapMaxY = Number.NEGATIVE_INFINITY;
+		for (const xy of gs.tiles.keys()) {
+			const p = tileToPoint(xy);
+			if (p.x > mapMaxX) mapMaxX = p.x;
+			if (p.y > mapMaxY) mapMaxY = p.y;
+		}
+		if (mapMaxX === Number.NEGATIVE_INFINITY) {
+			return { placement: null, message: "No map tiles available" };
+		}
+
+		const maxX = Math.floor(mapMaxX);
+		const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+		const startY = 24; // row 25 -> index 24
+		const endY = Math.floor(mapMaxY);
+
+		// Electrified building plan from the user's construct_building list
+		const candidates: Array<{ type: Building; count: number }> = [
+			{ type: "SupercomputerLab" as Building, count: 40 },
+			{ type: "CivTok" as Building, count: 40 },
+			{ type: "SoftwareCompany" as Building, count: 10 },
+			{ type: "SemiconductorFab" as Building, count: 5 },
+			{ type: "OpticalFiberPlant" as Building, count: 5 },
+			{ type: "SiliconSmelter" as Building, count: 2 },
+			{ type: "InternetServiceProvider" as Building, count: 5 },
+			{ type: "ComputerFactory" as Building, count: 19 },
+		];
+
+		// Aggregate counts by type
+		const agg = new Map<string, { type: Building; requested: number }>();
+		for (const it of candidates) {
+			const key = it.type as string;
+			const prev = agg.get(key);
+			if (prev) prev.requested += it.count;
+			else agg.set(key, { type: it.type, requested: it.count });
+		}
+
+		// Filter to electrified buildings using Config.Building[...].power === true
+		const electSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
+		for (const v of agg.values()) {
+			try {
+				const def = Config.Building[v.type];
+				if (def && def.power === true) electSpecs.push({ type: v.type, count: v.requested, targetLevel: 10 });
+			} catch (e) {
+				// ignore unknown types
+			}
+		}
+
+		// Ensure CoalPowerPlant exists at start of block
+		let coalExists = false;
+		for (const [xy, td] of gs.tiles.entries()) {
+			if (!td || !td.building) continue;
+			const pt = tileToPoint(xy);
+			if (pt.x < minX || pt.x > maxX || pt.y < startY || pt.y > endY) continue;
+			if (td.building.type === ("CoalPowerPlant" as Building)) { coalExists = true; break; }
+		}
+		if (!coalExists) {
+			let placedCoal = false;
+			for (let y = startY; y <= endY && !placedCoal; y++) {
+				for (let x = minX; x <= maxX && !placedCoal; x++) {
+					const xy = pointToTile({ x, y });
+					const td = gs.tiles.get(xy);
+					if (!td) continue;
+					if (!td.building) {
+						const b = makeBuilding({ type: "CoalPowerPlant" as Building, level: 0, desiredLevel: 10 });
+						td.building = b;
+						placedCoal = true;
+					}
+				}
+			}
+			if (placedCoal) { clearTransportSourceCache(); ensureVisualRefresh(); }
+		}
+
+		// Prepare summary map
+		const summaryMap = new Map<string, { type: Building; requested: number; placed: number }>();
+		for (const s of electSpecs) summaryMap.set(s.type, { type: s.type, requested: s.count, placed: 0 });
+
+		const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+		// Filter unknown defs and sort by tier ascending
+		const validPlan = electSpecs.filter((p) => {
+			try { return !!Config.Building[p.type]; } catch (e) { return false; }
+		});
+		const sortedPlan = [...validPlan].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
+
+		for (const spec of sortedPlan) {
+			for (let i = 0; i < spec.count; i++) {
+				try {
+					const res = buildBuildingsInRange(minX, maxX, startY, endY, [{ type: spec.type, count: 1, targetLevel: 10 }]);
+					const placed = res.results.length > 0 ? res.results[0].placed : 0;
+					const entry = summaryMap.get(spec.type);
+					if (entry) entry.placed += placed;
+					if (placed === 0) break;
+					await sleep(200);
+				} catch (e) {
+					console.error("largeHadronCollider3: placement failed for", spec.type, e);
+					break;
+				}
+			}
+		}
+
+		const results = Array.from(summaryMap.values());
+		try { ensureVisualRefresh(); } catch (e) { console.error("ensureVisualRefresh failed in largeHadronCollider3:", e); }
+		try {
+			const summary = results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+			showToast(`Large Hadron Collider 3 complete: ${summary}`);
+		} catch (e) {
+			console.error("showToast failed in largeHadronCollider3:", e);
+		}
+
+		return { placement: { results } };
+	}
+
 /**
  * dysonBuildPlan4
  *
@@ -1861,6 +2164,133 @@ export async function dysonBuildPlan4(): Promise<{
 		console.error("showToast failed in dysonBuildPlan4:", e);
 	}
 	return { leftStripPlacement: results };
+}
+
+/**
+ * Large Hadron Collider - Part 4
+ *
+ * - Mirrors `aldersonDisc4` but uses the leftmost 25-tile-wide strip and
+ *   the user's plan:
+ *     HedgeFund x250, SupercomputerLab x250, CivTok x70
+ * - Places one-by-one with a 200ms delay so the player can observe progress.
+ * - Ensures a CoalPowerPlant is placed AFTER the CivTok placements.
+ */
+export async function largeHadronCollider4(): Promise<{
+	leftStripPlacement: Array<{ type: Building; requested: number; placed: number; remaining: number }>;
+	removed?: number;
+	message?: string;
+}> {
+	const gs = getGameState();
+
+	// Delete the same set as aldersonDisc4 (CivGPT, Peacekeeper, SpaceCenter)
+	const toRemove = new Set<string>(["CivGPT", "Peacekeeper", "SpaceCenter"]);
+	let removed = 0;
+	for (const [xy, td] of gs.tiles.entries()) {
+		if (!td || !td.building) continue;
+		try {
+			if (toRemove.has(td.building.type as string)) {
+				td.building = undefined;
+				removed++;
+			}
+		} catch (e) {
+			// ignore malformed entries
+		}
+	}
+	if (removed > 0) {
+		try { clearTransportSourceCache(); } catch (e) { /* swallow */ }
+		try { ensureVisualRefresh(); } catch (e) { /* swallow */ }
+	}
+
+	// Determine left-hand strip bounds; extend to 25 tiles wide
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMinX = Number.POSITIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.x < mapMinX) mapMinX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+	if (mapMaxX === Number.NEGATIVE_INFINITY || mapMinX === Number.POSITIVE_INFINITY) {
+		return { leftStripPlacement: [], removed, message: "No map tiles available" };
+	}
+
+	const minX = Math.max(0, Math.floor(mapMinX));
+	const maxX = Math.min(Math.floor(mapMaxX), minX + 24); // 25 tiles wide
+	const minY = 0;
+	const maxY = Math.floor(mapMaxY);
+
+	const plan: Array<{ type: Building; total: number }> = [
+		{ type: "HedgeFund" as Building, total: 250 },
+		{ type: "SupercomputerLab" as Building, total: 250 },
+		{ type: "CivTok" as Building, total: 400 },
+	];
+
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	const results: Array<{ type: Building; requested: number; placed: number; remaining: number }> = [];
+
+	for (const item of plan) {
+		const summaryEntry = { type: item.type, requested: item.total, placed: 0, remaining: item.total };
+
+		// Defensive check: ensure building type exists
+		try {
+			if (!Config.Building[item.type]) {
+				console.warn("largeHadronCollider4: unknown building type, skipping:", item.type);
+				results.push(summaryEntry);
+				continue;
+			}
+		} catch (e) {
+			console.warn("largeHadronCollider4: Config check failed for", item.type, e);
+			results.push(summaryEntry);
+			continue;
+		}
+
+		for (let i = 0; i < item.total; i++) {
+			let res: { results: Array<{ type: Building; requested: number; placed: number }>; skippedWonders: number; skippedMines: number } | undefined;
+			try {
+				res = buildBuildingsInRange(minX, maxX, minY, maxY, [{ type: item.type, count: 1, targetLevel: 10 }]);
+			} catch (e) {
+				console.error("largeHadronCollider4: placement failed for", item.type, e);
+				break;
+			}
+
+			const placed = res && res.results.length > 0 ? res.results[0].placed : 0;
+			summaryEntry.placed += placed;
+			summaryEntry.remaining -= placed;
+			if (placed === 0) break; // no space left
+			await sleep(200);
+		}
+
+		results.push(summaryEntry);
+	}
+
+	// After all CivTok placements (and others), ensure a CoalPowerPlant exists in the left strip.
+	// Place one on the first empty tile scanning top->bottom, left->right.
+	let coalPlaced = false;
+	for (let y = minY; y <= maxY && !coalPlaced; y++) {
+		for (let x = minX; x <= maxX && !coalPlaced; x++) {
+			const xy = pointToTile({ x, y });
+			const td = gs.tiles.get(xy);
+			if (!td) continue;
+			if (!td.building) {
+				const b = makeBuilding({ type: "CoalPowerPlant" as Building, level: 0, desiredLevel: 10 });
+				td.building = b;
+				coalPlaced = true;
+			}
+		}
+	}
+	if (coalPlaced) { clearTransportSourceCache(); ensureVisualRefresh(); }
+
+	try { ensureVisualRefresh(); } catch (e) { console.error("ensureVisualRefresh failed in largeHadronCollider4:", e); }
+	try {
+		const summary = results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+		showToast(`LHC 4 complete: removed ${removed}; ${summary}; coalPlaced ${coalPlaced}`);
+	} catch (e) {
+		console.error("showToast failed in largeHadronCollider4:", e);
+	}
+
+	return { leftStripPlacement: results, removed };
 }
 
 /**
@@ -2114,9 +2544,9 @@ export async function aldersonDisc2(): Promise<{
 		{ type: "BiplaneFactory" as Building, count: 1 },
 		{ type: "LocomotiveFactory" as Building, count: 1 },
 		{ type: "CoinMint" as Building, count: 1 },
-		{ type: "PrintingHouse" as Building, count: 1 },
-		{ type: "PublishingHouse" as Building, count: 1 },
-		{ type: "MagazinePublisher" as Building, count: 1 },
+		{ type: "PrintingHouse" as Building, count: 2 },
+		{ type: "PublishingHouse" as Building, count: 2 },
+		{ type: "MagazinePublisher" as Building, count: 2 },
 		{ type: "Stadium" as Building, count: 1 },
 		{ type: "ActorsGuild" as Building, count: 1 },
 		{ type: "CableFactory" as Building, count: 3 },
@@ -2221,7 +2651,7 @@ export async function aldersonDisc3(): Promise<{
 			{ type: "OpticalFiberFactory" as Building, count: 7 },
 			{ type: "SemiconductorFab" as Building, count: 2 },
 			{ type: "AtomicFacility" as Building, count: 3 },
-			{ type: "CarFactory" as Building, count: 14 },
+			{ type: "CarFactory" as Building, count: 20 },
 			{ type: "ComputerFactory" as Building, count: 6 },
 			{ type: "AirplaneFactory" as Building, count: 6 },
 			{ type: "InternetServiceProvider" as Building, count: 10 },
@@ -2230,10 +2660,8 @@ export async function aldersonDisc3(): Promise<{
 			{ type: "MaglevFactory" as Building, count: 6 },
 			{ type: "RocketFactory" as Building, count: 5 },
 			{ type: "SatelliteFactory" as Building, count: 5 },
-			{ type: "NuclearMissileSilo" as Building, count: 12 },
 			{ type: "CivTok" as Building, count: 10 },
-			{ type: "RadioStation" as Building, count: 18 },
-		];
+			];
 
 	// Aggregate counts by type
 	const agg = new Map<string, { type: Building; requested: number }>();

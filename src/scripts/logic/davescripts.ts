@@ -1615,7 +1615,7 @@ export async function dysonBuildPlan2(): Promise<{
 		{ type: ("PublishingHouse" as Building), count: 5 },
 		{ type: ("Stadium" as Building), count: 5 },
 		{ type: ("MagazinePublisher" as Building), count: 8 },
-		{ type: ("Embassy" as Building), count: 10 },
+		{ type: ("Embassy" as Building), count: 4 },
 	];
 
 	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -1783,7 +1783,7 @@ export async function dysonBuildPlan3(): Promise<{
 
 	const plan: Array<{ type: Building; count: number }> = [
 		{ type: ("SiliconSmelter" as Building), count: 1 },
-	{ type: ("OpticalFiberFactory" as Building), count: 6 },
+		{ type: ("OpticalFiberFactory" as Building), count: 6 },
 		{ type: ("SemiconductorFab" as Building), count: 2 },
 		{ type: ("AtomicFacility" as Building), count: 3 },
 		{ type: ("CarFactory" as Building), count: 4 },
@@ -1791,10 +1791,10 @@ export async function dysonBuildPlan3(): Promise<{
 		{ type: ("AirplaneFactory" as Building), count: 6 },
 		{ type: ("InternetServiceProvider" as Building), count: 10 },
 		{ type: ("SoftwareCompany" as Building), count: 5 },
-		{ type: ("SupercomputerLab" as Building), count: 20 },
+		{ type: ("SupercomputerLab" as Building), count: 10 },
 		{ type: ("MaglevFactory" as Building), count: 6 },
 		{ type: ("RocketFactory" as Building), count: 5 },
-		{ type: ("NuclearMissileSilo" as Building), count: 20 },
+		{ type: ("NuclearMissileSilo" as Building), count: 12 },
 		{ type: ("RadioStation" as Building), count: 18 },
 	];
 

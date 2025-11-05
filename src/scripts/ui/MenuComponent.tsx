@@ -994,6 +994,112 @@ export function MenuComponent(): React.ReactNode {
                         <MenuItem check={((gameOptions.daveScriptsRun?.LargeHadronCollider4 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Large Hadron Collider 4"}</MenuItem>
                      </div>
 
+                        {/* Build Space Center 1..4 */}
+                        <div
+                           className="menu-popover-item"
+                           onPointerDown={async () => {
+                              playClick();
+                              setActive(null);
+                              try {
+                                 const mod = await import("../logic/davescripts");
+                                 if (mod && typeof mod.buildSpaceCenter1 === "function") {
+                                    const res = await mod.buildSpaceCenter1();
+                                    const opts = getGameOptions();
+                                    opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                    opts.daveScriptsRun.BuildSpaceCenter1 = opts.rebirthInfo?.length ?? 0;
+                                    notifyGameOptionsUpdate(opts);
+                                    const cleared = res.cleared ? `${res.cleared.cleared} cleared` : "none";
+                                    showToast(`Build Space Center 1 complete: removed ${res.removed}; ${cleared}`);
+                                 } else {
+                                    showToast("Dave's scripts are not available in this build.");
+                                 }
+                              } catch (err) {
+                                 playError();
+                                 showToast(String(err));
+                              }
+                           }}
+                        >
+                           <MenuItem check={((gameOptions.daveScriptsRun?.BuildSpaceCenter1 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Build Space Center 1"}</MenuItem>
+                        </div>
+
+                        <div
+                           className="menu-popover-item"
+                           onPointerDown={async () => {
+                              playClick();
+                              setActive(null);
+                              try {
+                                 const mod = await import("../logic/davescripts");
+                                 if (mod && typeof mod.buildSpaceCenter2 === "function") {
+                                    const res = await mod.buildSpaceCenter2();
+                                    const opts = getGameOptions();
+                                    opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                    opts.daveScriptsRun.BuildSpaceCenter2 = opts.rebirthInfo?.length ?? 0;
+                                    notifyGameOptionsUpdate(opts);
+                                    showToast(`Build Space Center 2: ${res.message ?? "complete"}`);
+                                 } else {
+                                    showToast("Dave's scripts are not available in this build.");
+                                 }
+                              } catch (err) {
+                                 playError();
+                                 showToast(String(err));
+                              }
+                           }}
+                        >
+                           <MenuItem check={((gameOptions.daveScriptsRun?.BuildSpaceCenter2 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Build Space Center 2"}</MenuItem>
+                        </div>
+
+                        <div
+                           className="menu-popover-item"
+                           onPointerDown={async () => {
+                              playClick();
+                              setActive(null);
+                              try {
+                                 const mod = await import("../logic/davescripts");
+                                 if (mod && typeof mod.buildSpaceCenter3 === "function") {
+                                    const res = await mod.buildSpaceCenter3();
+                                    const opts = getGameOptions();
+                                    opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                    opts.daveScriptsRun.BuildSpaceCenter3 = opts.rebirthInfo?.length ?? 0;
+                                    notifyGameOptionsUpdate(opts);
+                                    showToast(`Build Space Center 3: ${res.message ?? "complete"}`);
+                                 } else {
+                                    showToast("Dave's scripts are not available in this build.");
+                                 }
+                              } catch (err) {
+                                 playError();
+                                 showToast(String(err));
+                              }
+                           }}
+                        >
+                           <MenuItem check={((gameOptions.daveScriptsRun?.BuildSpaceCenter3 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Build Space Center 3"}</MenuItem>
+                        </div>
+
+                        <div
+                           className="menu-popover-item"
+                           onPointerDown={async () => {
+                              playClick();
+                              setActive(null);
+                              try {
+                                 const mod = await import("../logic/davescripts");
+                                 if (mod && typeof mod.buildSpaceCenter4 === "function") {
+                                    const res = await mod.buildSpaceCenter4();
+                                    const opts = getGameOptions();
+                                    opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                                    opts.daveScriptsRun.BuildSpaceCenter4 = opts.rebirthInfo?.length ?? 0;
+                                    notifyGameOptionsUpdate(opts);
+                                    showToast(`Build Space Center 4: ${res.message ?? "complete"}`);
+                                 } else {
+                                    showToast("Dave's scripts are not available in this build.");
+                                 }
+                              } catch (err) {
+                                 playError();
+                                 showToast(String(err));
+                              }
+                           }}
+                        >
+                           <MenuItem check={((gameOptions.daveScriptsRun?.BuildSpaceCenter4 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Build Space Center 4"}</MenuItem>
+                        </div>
+
                   </div>
                </div>
             {isHalloween(now) ? (

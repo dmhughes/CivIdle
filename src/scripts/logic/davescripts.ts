@@ -2294,6 +2294,413 @@ export async function largeHadronCollider4(): Promise<{
 }
 
 /**
+ * Build Space Center - Part 1
+ *
+ * - Delete ALL CivTok, HedgeFund, SupercomputerLab across the map.
+ * - Clear the right-hand 10-tile-wide strip rows 9..39 (indexes 8..38).
+ */
+export async function buildSpaceCenter1(): Promise<{
+	removed: number;
+	cleared: { cleared: number; preservedWonders: number; preservedMines: number } | null;
+	message?: string;
+}> {
+	const gs = getGameState();
+
+	// Delete all CivTok, HedgeFund, SupercomputerLab across the map
+	const toRemove = new Set<string>(["CivTok", "HedgeFund", "SupercomputerLab"]);
+	let removed = 0;
+	for (const [xy, td] of gs.tiles.entries()) {
+		if (!td || !td.building) continue;
+		try {
+			if (toRemove.has(td.building.type as string)) {
+				td.building = undefined;
+				removed++;
+			}
+		} catch (e) {
+			// ignore malformed entries
+		}
+	}
+	if (removed > 0) {
+		try { clearTransportSourceCache(); } catch (e) { /* swallow */ }
+		try { ensureVisualRefresh(); } catch (e) { /* swallow */ }
+	}
+
+	// Determine right-hand 10-tile band bounds and row range 9..39 -> indexes 8..38
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+	if (mapMaxX === Number.NEGATIVE_INFINITY) {
+		return { removed, cleared: null, message: "No map tiles available" };
+	}
+
+	const maxX = Math.floor(mapMaxX);
+	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+	const minY = 8; // row 9 -> index 8
+	const maxY = Math.min(Math.floor(mapMaxY), 38);
+
+	const cleared = clearRange(minX, maxX, minY, maxY);
+
+	// Best-effort clear transport cache and force a double visual refresh
+	try { clearTransportSourceCache(); } catch (e) { /* swallow */ }
+	try {
+		ensureVisualRefresh();
+		await new Promise((r) => setTimeout(r, 50));
+		ensureVisualRefresh();
+	} catch (e) {
+		console.error("ensureVisualRefresh failed in buildSpaceCenter1:", e);
+	}
+
+	try {
+		showToast(`Build Space Center 1: removed ${removed}; cleared ${cleared.cleared}; preservedWonders ${cleared.preservedWonders}; preservedMines ${cleared.preservedMines}`);
+	} catch (e) {
+		console.error("showToast failed in buildSpaceCenter1:", e);
+	}
+
+	return { removed, cleared };
+}
+
+// Stubs for Space Center 2..4 (implemented later as needed)
+export async function buildSpaceCenter2(): Promise<{
+	placement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+	message?: string;
+}> {
+	const gs = getGameState();
+
+	// Determine map bounds
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+	if (mapMaxX === Number.NEGATIVE_INFINITY) {
+		return { placement: null, message: "No map tiles available" };
+	}
+
+	const maxX = Math.floor(mapMaxX);
+	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+	const startY = 8; // row 9 -> index 8
+	const endY = Math.floor(mapMaxY);
+
+	// Non-electrified building plan (using the 4th-argument quantities from the supplied list; duplicates aggregated)
+	const plan: Array<{ type: Building; count: number }> = [
+		{ type: "MagazinePublisher" as Building, count: 8 },
+		{ type: "Stadium" as Building, count: 5 },
+		{ type: "PublishingHouse" as Building, count: 5 },
+		{ type: "BiplaneFactory" as Building, count: 1 },
+		{ type: "Museum" as Building, count: 5 },
+		{ type: "ActorsGuild" as Building, count: 3 },
+		{ type: "University" as Building, count: 10 },
+		{ type: "LocomotiveFactory" as Building, count: 8 },
+		{ type: "OilRefinery" as Building, count: 8 },
+		{ type: "PrintingHouse" as Building, count: 7 },
+		{ type: "DynamiteWorkshop" as Building, count: 3 },
+		{ type: "Steamworks" as Building, count: 1 },
+		{ type: "Shrine" as Building, count: 1 },
+		{ type: "FurnitureWorkshop" as Building, count: 1 },
+		{ type: "LensWorkshop" as Building, count: 1 },
+		{ type: "MusiciansGuild" as Building, count: 1 },
+		{ type: "PaintersGuild" as Building, count: 1 },
+		{ type: "RifleFactory" as Building, count: 1 },
+		{ type: "GatlingGunFactory" as Building, count: 1 },
+		{ type: "CableFactory" as Building, count: 3 },
+		{ type: "Glassworks" as Building, count: 2 },
+		{ type: "GunpowderMill" as Building, count: 1 },
+		{ type: "Stable" as Building, count: 1 },
+		{ type: "PaperMaker" as Building, count: 1 },
+		{ type: "PlasticsFactory" as Building, count: 3 },
+		{ type: "PoetrySchool" as Building, count: 1 },
+		{ type: "SteelMill" as Building, count: 3 },
+		{ type: "IronForge" as Building, count: 1 },
+		{ type: "Sandpit" as Building, count: 1 },
+		{ type: "Brewery" as Building, count: 1 },
+	];
+
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	// summary map
+	const summaryMap = new Map<string, { type: Building; requested: number; placed: number }>();
+	for (const p of plan) summaryMap.set(p.type, { type: p.type, requested: p.count, placed: 0 });
+
+	// Filter unknown building types and sort by tier ascending
+	const validPlan = plan.filter((p) => {
+		try { return !!Config.Building[p.type]; } catch (e) { return false; }
+	});
+	const sortedPlan = [...validPlan].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
+
+	for (const spec of sortedPlan) {
+		for (let i = 0; i < spec.count; i++) {
+			try {
+				const res = buildBuildingsInRange(minX, maxX, startY, endY, [{ type: spec.type, count: 1, targetLevel: 10 }]);
+				const placed = res.results.length > 0 ? res.results[0].placed : 0;
+				const entry = summaryMap.get(spec.type);
+				if (entry) entry.placed += placed;
+				if (placed === 0) break; // no more space for this type
+				await sleep(200);
+			} catch (e) {
+				console.error("buildSpaceCenter2: placement failed for", spec.type, e);
+				break;
+			}
+		}
+	}
+
+	const results = Array.from(summaryMap.values());
+	try { ensureVisualRefresh(); } catch (e) { console.error("ensureVisualRefresh failed in buildSpaceCenter2:", e); }
+	try {
+		const summary = results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+		showToast(`Build Space Center 2 complete: ${summary}`);
+	} catch (e) {
+		console.error("showToast failed in buildSpaceCenter2:", e);
+	}
+
+	return { placement: { results } };
+}
+
+export async function buildSpaceCenter3(): Promise<{
+	placement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+	message?: string;
+}> {
+	const gs = getGameState();
+
+	// Determine map bounds
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+	if (mapMaxX === Number.NEGATIVE_INFINITY) {
+		return { placement: null, message: "No map tiles available" };
+	}
+
+	const maxX = Math.floor(mapMaxX);
+	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+
+	const startY = 24; // row 25 -> index 24
+	const endY = Math.floor(mapMaxY);
+
+	// Electrified building plan (using the 4th-argument quantities from the supplied list)
+	const candidates: Array<{ type: Building; count: number }> = [
+		{ type: "RadioStation" as Building, count: 20 },
+		{ type: "SupercomputerLab" as Building, count: 20 },
+		{ type: "MaglevFactory" as Building, count: 6 },
+		{ type: "SoftwareCompany" as Building, count: 5 },
+		{ type: "AirplaneFactory" as Building, count: 6 },
+		{ type: "CarFactory" as Building, count: 4 },
+		{ type: "ComputerFactory" as Building, count: 6 },
+		{ type: "SemiconductorFab" as Building, count: 2 },
+		{ type: "SiliconSmelter" as Building, count: 1 },
+	];
+
+	// Aggregate counts by type
+	const agg = new Map<string, { type: Building; requested: number }>();
+	for (const it of candidates) {
+		const key = it.type as string;
+		const prev = agg.get(key);
+		if (prev) prev.requested += it.count;
+		else agg.set(key, { type: it.type, requested: it.count });
+	}
+
+	// Filter to electrified buildings using Config.Building[...].power === true
+	const electSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
+	for (const v of agg.values()) {
+		try {
+			const def = Config.Building[v.type];
+			if (def && def.power === true) electSpecs.push({ type: v.type, count: v.requested, targetLevel: 10 });
+		} catch (e) {
+			// ignore unknown types
+		}
+	}
+
+	// Ensure CoalPowerPlant exists at start of block
+	let coalExists = false;
+	for (const [xy, td] of gs.tiles.entries()) {
+		if (!td || !td.building) continue;
+		const pt = tileToPoint(xy);
+		if (pt.x < minX || pt.x > maxX || pt.y < startY || pt.y > endY) continue;
+		if (td.building.type === ("CoalPowerPlant" as Building)) { coalExists = true; break; }
+	}
+	if (!coalExists) {
+		let placedCoal = false;
+		for (let y = startY; y <= endY && !placedCoal; y++) {
+			for (let x = minX; x <= maxX && !placedCoal; x++) {
+				const xy = pointToTile({ x, y });
+				const td = gs.tiles.get(xy);
+				if (!td) continue;
+				if (!td.building) {
+					const b = makeBuilding({ type: "CoalPowerPlant" as Building, level: 0, desiredLevel: 10 });
+					td.building = b;
+					placedCoal = true;
+				}
+			}
+		}
+		if (placedCoal) { clearTransportSourceCache(); ensureVisualRefresh(); }
+	}
+
+	// Prepare summary map
+	const summaryMap = new Map<string, { type: Building; requested: number; placed: number }>();
+	for (const s of electSpecs) summaryMap.set(s.type, { type: s.type, requested: s.count, placed: 0 });
+
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	// Filter unknown defs and sort by tier ascending
+	const validPlan = electSpecs.filter((p) => {
+		try { return !!Config.Building[p.type]; } catch (e) { return false; }
+	});
+	const sortedPlan = [...validPlan].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
+
+	for (const spec of sortedPlan) {
+		for (let i = 0; i < spec.count; i++) {
+			try {
+				const res = buildBuildingsInRange(minX, maxX, startY, endY, [{ type: spec.type, count: 1, targetLevel: 10 }]);
+				const placed = res.results.length > 0 ? res.results[0].placed : 0;
+				const entry = summaryMap.get(spec.type);
+				if (entry) entry.placed += placed;
+				if (placed === 0) break;
+				await sleep(200);
+			} catch (e) {
+				console.error("buildSpaceCenter3: placement failed for", spec.type, e);
+				break;
+			}
+		}
+	}
+
+	const results = Array.from(summaryMap.values());
+	try { ensureVisualRefresh(); } catch (e) { console.error("ensureVisualRefresh failed in buildSpaceCenter3:", e); }
+	try {
+		const summary = results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+		showToast(`Build Space Center 3 complete: ${summary}`);
+	} catch (e) {
+		console.error("showToast failed in buildSpaceCenter3:", e);
+	}
+
+	return { placement: { results } };
+}
+
+export async function buildSpaceCenter4(): Promise<{
+	leftStripPlacement: Array<{ type: Building; requested: number; placed: number; remaining: number }>;
+	removed?: number;
+	message?: string;
+}> {
+	const gs = getGameState();
+
+	// Delete the same set as aldersonDisc4 (CivGPT, Peacekeeper, SpaceCenter)
+	const toRemove = new Set<string>(["CivGPT", "Peacekeeper", "SpaceCenter"]);
+	let removed = 0;
+	for (const [xy, td] of gs.tiles.entries()) {
+		if (!td || !td.building) continue;
+		try {
+			if (toRemove.has(td.building.type as string)) {
+				td.building = undefined;
+				removed++;
+			}
+		} catch (e) {
+			// ignore malformed entries
+		}
+	}
+	if (removed > 0) {
+		try { clearTransportSourceCache(); } catch (e) { /* swallow */ }
+		try { ensureVisualRefresh(); } catch (e) { /* swallow */ }
+	}
+
+	// Determine left-hand strip bounds; extend to 25 tiles wide
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMinX = Number.POSITIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.x < mapMinX) mapMinX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+	if (mapMaxX === Number.NEGATIVE_INFINITY || mapMinX === Number.POSITIVE_INFINITY) {
+		return { leftStripPlacement: [], removed, message: "No map tiles available" };
+	}
+
+	const minX = Math.max(0, Math.floor(mapMinX));
+	const maxX = Math.min(Math.floor(mapMaxX), minX + 24); // 25 tiles wide
+	const minY = 0;
+	const maxY = Math.floor(mapMaxY);
+
+	const plan: Array<{ type: Building; total: number }> = [
+		{ type: "SpaceCenter" as Building, total: 1000 },
+	];
+
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	const results: Array<{ type: Building; requested: number; placed: number; remaining: number }> = [];
+
+	for (const item of plan) {
+		const summaryEntry = { type: item.type, requested: item.total, placed: 0, remaining: item.total };
+
+		// Defensive check: ensure building type exists
+		try {
+			if (!Config.Building[item.type]) {
+				console.warn("buildSpaceCenter4: unknown building type, skipping:", item.type);
+				results.push(summaryEntry);
+				continue;
+			}
+		} catch (e) {
+			console.warn("buildSpaceCenter4: Config check failed for", item.type, e);
+			results.push(summaryEntry);
+			continue;
+		}
+
+		for (let i = 0; i < item.total; i++) {
+			let res: { results: Array<{ type: Building; requested: number; placed: number }>; skippedWonders: number; skippedMines: number } | undefined;
+			try {
+				res = buildBuildingsInRange(minX, maxX, minY, maxY, [{ type: item.type, count: 1, targetLevel: 10 }]);
+			} catch (e) {
+				console.error("buildSpaceCenter4: placement failed for", item.type, e);
+				break;
+			}
+
+			const placed = res && res.results.length > 0 ? res.results[0].placed : 0;
+			summaryEntry.placed += placed;
+			summaryEntry.remaining -= placed;
+			if (placed === 0) break; // no space left
+			await sleep(200);
+		}
+
+		results.push(summaryEntry);
+	}
+
+	// After placements, ensure a CoalPowerPlant exists in the left strip.
+	let coalPlaced = false;
+	for (let y = minY; y <= maxY && !coalPlaced; y++) {
+		for (let x = minX; x <= maxX && !coalPlaced; x++) {
+			const xy = pointToTile({ x, y });
+			const td = gs.tiles.get(xy);
+			if (!td) continue;
+			if (!td.building) {
+				const b = makeBuilding({ type: "CoalPowerPlant" as Building, level: 0, desiredLevel: 10 });
+				td.building = b;
+				coalPlaced = true;
+			}
+		}
+	}
+	if (coalPlaced) { clearTransportSourceCache(); ensureVisualRefresh(); }
+
+	try { ensureVisualRefresh(); } catch (e) { console.error("ensureVisualRefresh failed in buildSpaceCenter4:", e); }
+	try {
+		const summary = results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+		showToast(`Build Space Center 4 complete: removed ${removed}; ${summary}; coalPlaced ${coalPlaced}`);
+	} catch (e) {
+		console.error("showToast failed in buildSpaceCenter4:", e);
+	}
+
+	return { leftStripPlacement: results, removed };
+}
+
+/**
  * dysonBuildPlan3
  *
  * - Place the provided high-tech / electrified `plan` into the rightmost

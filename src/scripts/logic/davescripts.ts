@@ -3155,6 +3155,183 @@ export async function aldersonDisc3(): Promise<{
 	return { placement: { results } };
 }
 
+/**
+ * Generic builder: place a plan one-by-one into a left/right strip.
+ *
+ * - side: "left" | "right" selects which horizontal edge the strip is anchored to.
+ * - width: number of tiles wide for the strip.
+ * - plan: Array of { type: Building; count: number; level?: number } to place (will be placed one at a time).
+ * - startRow: which row (y index) to start placing on.
+ * - intervalMs: milliseconds to wait between individual placements.
+ *
+ * Behavior:
+ * - Computes the requested strip based on the map extents.
+ * - Places buildings one at a time directly onto tiles and waits intervalMs
+ *   between placements so UI can show progress.
+ * - Stops attempting a given building type if a placement returns 0 (no space).
+ *
+ * Returns an array of per-type summaries: requested and placed counts.
+ */
+export async function doBuildingPlan(
+	side: "left" | "right",
+	width: number,
+	plan: Array<{ type: Building; count: number; level?: number }>,
+	startRow: number,
+	intervalMs: number,
+): Promise<{ results: Array<{ type: Building; requested: number; placed: number }>; message?: string }> {
+	const gs = getGameState();
+
+	// Determine map bounds
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMinX = Number.POSITIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.x < mapMinX) mapMinX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
+
+	if (mapMaxX === Number.NEGATIVE_INFINITY || mapMinX === Number.POSITIVE_INFINITY) {
+		return { results: [], message: "No map tiles available" };
+	}
+
+	const floorMaxX = Math.floor(mapMaxX);
+	const floorMinX = Math.max(0, Math.floor(mapMinX));
+	const floorMaxY = Math.floor(mapMaxY);
+
+	// Compute strip bounds
+	let minX: number;
+	let maxX: number;
+	if (side === "right") {
+		maxX = floorMaxX;
+		minX = Math.max(0, maxX - Math.max(0, width - 1));
+	} else {
+		minX = floorMinX;
+		maxX = Math.min(floorMaxX, minX + Math.max(0, width - 1));
+	}
+
+	const minY = Math.max(0, Math.floor(startRow));
+	const maxY = floorMaxY;
+
+	if (minY > maxY) return { results: [], message: "Start row is below map bounds" };
+
+	// Build a linear list of coordinates in scan order starting at startRow
+	const coords: { x: number; y: number }[] = [];
+	for (let y = minY; y <= maxY; y++) {
+		for (let x = minX; x <= maxX; x++) {
+			coords.push({ x, y });
+		}
+	}
+
+	// Cursor across coords so we fill the strip sequentially and do not
+	// repeatedly attempt the same tiles for different building types.
+	let cursor = 0;
+	let anyPlaced = false;
+
+	// Sort incoming plan by building tier ascending so lower-tier (fewer
+	// dependencies) buildings are placed first.
+	const sortedPlan = [...plan].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
+
+	// If the plan contains any electrified buildings, ensure a CoalPowerPlant
+	// exists in the target strip. If none exists, place one on the first empty
+	// tile and advance the cursor past it so subsequent placements don't reuse it.
+	let containsElectrified = false;
+	for (const p of sortedPlan) {
+		try {
+			if (Config.Building[p.type] && Config.Building[p.type].power === true) { containsElectrified = true; break; }
+		} catch (e) {
+			// ignore unknown types
+		}
+	}
+
+	if (containsElectrified) {
+		let coalExists = false;
+		for (const { x, y } of coords) {
+			const xy = pointToTile({ x, y });
+			const td = gs.tiles.get(xy);
+			if (!td) continue;
+			if (td.building && td.building.type === ("CoalPowerPlant" as Building)) { coalExists = true; break; }
+		}
+		if (!coalExists) {
+			for (let i = 0; i < coords.length; i++) {
+				const { x, y } = coords[i];
+				const xy = pointToTile({ x, y });
+				const td = gs.tiles.get(xy);
+				if (!td) continue;
+				if (!td.building) {
+					const b = makeBuilding({ type: "CoalPowerPlant" as Building, level: 0, desiredLevel: 10 });
+					// Give power plant max stockpile/input settings by default
+					b.stockpileCapacity = STOCKPILE_CAPACITY_MAX;
+					b.stockpileMax = STOCKPILE_MAX_MAX;
+					b.inputMode = BuildingInputMode.StoragePercentage;
+					b.maxInputDistance = Number.POSITIVE_INFINITY;
+					td.building = b;
+					anyPlaced = true;
+					cursor = i + 1;
+					break;
+				}
+			}
+		}
+	}
+
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	const results: Array<{ type: Building; requested: number; placed: number }> = [];
+
+	for (const spec of sortedPlan) {
+		const requested = spec.count;
+		// `level` is the desired building level supplied per-plan-item.
+		const targetLevel = spec.level ?? 10;
+		let placed = 0;
+
+		// Defensive: skip unknown building types
+		try {
+			if (!Config.Building[spec.type]) {
+				results.push({ type: spec.type, requested, placed: 0 });
+				continue;
+			}
+		} catch (e) {
+			results.push({ type: spec.type, requested, placed: 0 });
+			continue;
+		}
+
+		while (placed < requested && cursor < coords.length) {
+			const { x, y } = coords[cursor++];
+			const xy = pointToTile({ x, y });
+			const td = gs.tiles.get(xy);
+			if (!td) continue;
+
+			// Only build on empty tiles — DO NOT overwrite any existing building
+			// (this intentionally removes prior protections like preserving
+			// wonders or deposits; empty-state is the sole placement condition).
+			if (td.building) continue;
+
+			// Create building at level 0 and set desiredLevel so the game's
+			// construction logic applies (resources reserved, status 'building').
+			const b = makeBuilding({ type: spec.type, level: 0, desiredLevel: targetLevel });
+			b.stockpileCapacity = STOCKPILE_CAPACITY_MAX;
+			b.stockpileMax = STOCKPILE_MAX_MAX;
+			b.inputMode = BuildingInputMode.StoragePercentage;
+			b.maxInputDistance = Number.POSITIVE_INFINITY;
+			td.building = b;
+			placed++;
+			anyPlaced = true;
+
+			// Pause between placements so UI shows incremental progress
+			if (intervalMs > 0) await sleep(intervalMs);
+		}
+
+		results.push({ type: spec.type, requested, placed });
+		// If we exhausted coords early, stop processing further specs
+		if (cursor >= coords.length) break;
+	}
+
+	if (anyPlaced) clearTransportSourceCache();
+	ensureVisualRefresh();
+	return { results };
+}
+
 
 
 

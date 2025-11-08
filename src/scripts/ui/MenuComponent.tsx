@@ -79,6 +79,7 @@ const XmasImages = [Xmas1, Xmas2, Xmas3, Xmas4, Xmas5, Xmas6, Xmas7, Xmas8];
 const XmasImage = XmasImages[Math.floor(Math.random() * XmasImages.length)];
 
 export function MenuComponent(): React.ReactNode {
+   
    const [gameOptions, setGameOptions] = useState(() => getGameOptions());
    useEffect(() => {
       const unsub = watchGameOptions((opts) => setGameOptions(opts));
@@ -1022,6 +1023,8 @@ export function MenuComponent(): React.ReactNode {
                            <MenuItem check={((gameOptions.daveScriptsRun?.BuildSpaceCenter1 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Build Space Center 1"}</MenuItem>
                         </div>
 
+                       {/* experimental SC items removed */}
+
                         <div
                            className="menu-popover-item"
                            onPointerDown={async () => {
@@ -1098,6 +1101,28 @@ export function MenuComponent(): React.ReactNode {
                            }}
                         >
                            <MenuItem check={((gameOptions.daveScriptsRun?.BuildSpaceCenter4 ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"Build Space Center 4"}</MenuItem>
+                        </div>
+
+                        {/* Building Manager - opens UI modal (dynamic import) */}
+                        <div
+                           className="menu-popover-item"
+                           onPointerDown={async () => {
+                              playClick();
+                              setActive(null);
+                              try {
+                                 const mod = await import("./BuildingManagerModal");
+                                 if (mod && typeof mod.BuildingManagerModal === "function") {
+                                    showModal(<mod.BuildingManagerModal />);
+                                 } else {
+                                    showToast("Building Manager is not available in this build.");
+                                 }
+                              } catch (err) {
+                                 playError();
+                                 showToast(String(err));
+                              }
+                           }}
+                        >
+                           <MenuItem check={false}>{"Building Manager"}</MenuItem>
                         </div>
 
                   </div>

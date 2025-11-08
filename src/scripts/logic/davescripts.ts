@@ -15,6 +15,7 @@ import { findSpecialBuilding, getBuildingThatExtract, isWorldOrNaturalWonder } f
 import { Config } from "../../../shared/logic/Config";
 import { getGameState, notifyGameStateUpdate } from "../../../shared/logic/GameStateLogic";
 import { getGrid } from "../../../shared/logic/IntraTickCache";
+
 import type { ICloneBuildingData } from "../../../shared/logic/Tile";
 import { BuildingInputMode, makeBuilding, STOCKPILE_CAPACITY_MAX, STOCKPILE_MAX_MAX } from "../../../shared/logic/Tile";
 import { clearTransportSourceCache } from "../../../shared/logic/Update";
@@ -3331,6 +3332,13 @@ export async function doBuildingPlan(
 	ensureVisualRefresh();
 	return { results };
 }
+
+
+
+
+
+
+
 
 
 

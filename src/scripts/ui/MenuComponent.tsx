@@ -1,6 +1,7 @@
 import classNames from "classnames";
 import type { PropsWithChildren } from "react";
 import { useEffect, useRef, useState } from "react";
+import type { Building } from "../../../shared/definitions/BuildingDefinitions";
 import { isChristmas, isHalloween } from "../../../shared/definitions/TimedBuildingUnlock";
 import { DISCORD_URL, SUPPORTER_PACK_URL } from "../../../shared/logic/Constants";
 import { getGameOptions, notifyGameOptionsUpdate, watchGameOptions } from "../../../shared/logic/GameStateLogic";
@@ -419,7 +420,7 @@ export function MenuComponent(): React.ReactNode {
                            // dynamic import so UI doesn't depend on the scripts module at compile time
                            const mod = await import("../logic/davescripts");
                            if (mod && typeof mod.buildInitialMines === "function") {
-                              const result = mod.buildInitialMines();
+                              const result = await mod.buildInitialMines();
                               const houses = result.houseResult?.placed ?? 0;
                               // mark as run for this rebirth
                               const opts = getGameOptions();
@@ -486,7 +487,7 @@ export function MenuComponent(): React.ReactNode {
                               opts.daveScriptsRun = opts.daveScriptsRun ?? {};
                               opts.daveScriptsRun.BuildBigBenMaterials = opts.rebirthInfo?.length ?? 0;
                               notifyGameOptionsUpdate(opts);
-                              const summary = res.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+                              const summary = res.results.map((r: { type: Building; requested?: number; placed?: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
                               showToast(`BuildBigBenMaterials: ${summary}`);
                            } else {
                               showToast("Dave's scripts are not available in this build.");
@@ -513,8 +514,8 @@ export function MenuComponent(): React.ReactNode {
                               opts.daveScriptsRun = opts.daveScriptsRun ?? {};
                               opts.daveScriptsRun.PrepareCondoMaterials = opts.rebirthInfo?.length ?? 0;
                               notifyGameOptionsUpdate(opts);
-                              const top = res.topPlacement ? res.topPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
-                              const bottom = res.bottomPlacement ? res.bottomPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              const top = res.topPlacement ? res.topPlacement.results.map((r: { type: Building; requested?: number; placed?: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              const bottom = res.bottomPlacement ? res.bottomPlacement.results.map((r: { type: Building; requested?: number; placed?: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
                               showToast(`PrepareCondoMaterials: top: ${top}; cleared ${res.cleared?.cleared ?? 0}; bottom: ${bottom}`);
                            } else {
                               showToast("Dave's scripts are not available in this build.");
@@ -677,8 +678,8 @@ export function MenuComponent(): React.ReactNode {
                               opts.daveScriptsRun = opts.daveScriptsRun ?? {};
                               opts.daveScriptsRun.DysonPart1 = opts.rebirthInfo?.length ?? 0;
                               notifyGameOptionsUpdate(opts);
-                              const smallSummary = res.smallRowPlacement ? res.smallRowPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
-                              showToast(`Dyson Part 1 complete: removedCloneLabs ${res.removedCloneLabs}; cleared ${res.cleared?.cleared ?? 0}; smallRow: ${smallSummary}`);
+                              const smallSummary = res.smallRowPlacement ? res.smallRowPlacement.results.map((r: { type: Building; requested?: number; placed?: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              showToast(`Dyson Part 1 complete: removedCloneLabs; cleared ${res.cleared?.cleared ?? 0}; smallRow: ${smallSummary}`);
                            } else {
                               showToast("Dave's scripts are not available in this build.");
                            }
@@ -704,7 +705,7 @@ export function MenuComponent(): React.ReactNode {
                               opts.daveScriptsRun = opts.daveScriptsRun ?? {};
                               opts.daveScriptsRun.DysonPart2 = opts.rebirthInfo?.length ?? 0;
                               notifyGameOptionsUpdate(opts);
-                              const summary = res.placement ? res.placement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              const summary = res.placement ? res.placement.results.map((r: { type: Building; requested?: number; placed?: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
                               showToast(`Dyson Part 2 complete: placed ${res.placement ? res.placement.results.reduce((a,b)=>a+(b.placed||0),0):0}; ${summary}`);
                            } else {
                               showToast("Dave's scripts are not available in this build.");
@@ -758,7 +759,7 @@ export function MenuComponent(): React.ReactNode {
                               opts.daveScriptsRun = opts.daveScriptsRun ?? {};
                               opts.daveScriptsRun.DysonPart4 = opts.rebirthInfo?.length ?? 0;
                               notifyGameOptionsUpdate(opts);
-                              const summary = (res.leftStripPlacement || []).map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") || "none";
+                              const summary = (res.leftStripPlacement || []).map((r: { type: Building; requested?: number; placed?: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") || "none";
                               showToast(`Dyson Part 4 complete: ${summary}`);
                            } else {
                               showToast("Dave's scripts are not available in this build.");
@@ -806,14 +807,27 @@ export function MenuComponent(): React.ReactNode {
                            setActive(null);
                            try {
                               const mod = await import("../logic/davescripts");
-                              const fn = typeof mod.aldersonDisc2 === "function" ? mod.aldersonDisc2 : typeof mod.aldersonDice2 === "function" ? mod.aldersonDice2 : null;
+                              const fn = typeof mod.aldersonDisc2 === "function" ? mod.aldersonDisc2 : null;
                               if (fn) {
                                  const res = await fn();
+
+                                 // Define a specific shape for the placement results
+                                 type PlacementResult = { type: string; placed: number; requested: number };
+                                 type AldersonResult = { placement?: { results?: PlacementResult[] } };
+
+                                 // Narrow the result to the expected shape without using `any`
+                                 const typed = res as AldersonResult;
+                                 const results = typed.placement?.results ?? [];
+
                                  const opts = getGameOptions();
                                  opts.daveScriptsRun = opts.daveScriptsRun ?? {};
                                  opts.daveScriptsRun.AldersonDisc2 = opts.rebirthInfo?.length ?? 0;
                                  notifyGameOptionsUpdate(opts);
-                                 const summary = res.placement ? res.placement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+
+                                 const summary = results.length
+                                   ? results.map(r => `${r.type} ${r.placed}/${r.requested}`).join(", ")
+                                   : "none";
+
                                  showToast(`Alderson Disc 2 complete: ${summary}`);
                               } else {
                                  showToast("Dave's scripts are not available in this build.");
@@ -841,7 +855,7 @@ export function MenuComponent(): React.ReactNode {
                                  opts.daveScriptsRun = opts.daveScriptsRun ?? {};
                                  opts.daveScriptsRun.AldersonDisc3 = opts.rebirthInfo?.length ?? 0;
                                  notifyGameOptionsUpdate(opts);
-                                 const summary = res.placement ? res.placement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                                 const summary = res.placement ? res.placement.results.map((r: { type: Building; requested?: number; placed?: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
                                  showToast(`Alderson Disc 3 complete: ${summary}`);
                               } else {
                                  showToast("Dave's scripts are not available in this build.");
@@ -925,7 +939,7 @@ export function MenuComponent(): React.ReactNode {
                                  opts.daveScriptsRun = opts.daveScriptsRun ?? {};
                                  opts.daveScriptsRun.LargeHadronCollider2 = opts.rebirthInfo?.length ?? 0;
                                  notifyGameOptionsUpdate(opts);
-                                 const summary = res.placement ? res.placement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                                 const summary = res.placement ? res.placement.results.map((r: { type: Building; requested?: number; placed?: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
                                  showToast(`LHC 2 complete: ${summary}`);
                               } else {
                                  showToast("Dave's scripts are not available in this build.");
@@ -979,7 +993,7 @@ export function MenuComponent(): React.ReactNode {
                                  opts.daveScriptsRun = opts.daveScriptsRun ?? {};
                                  opts.daveScriptsRun.LargeHadronCollider4 = opts.rebirthInfo?.length ?? 0;
                                  notifyGameOptionsUpdate(opts);
-                                 const summary = res.leftStripPlacement ? res.leftStripPlacement.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                                 const summary = res.leftStripPlacement ? res.leftStripPlacement.map((r: { type: Building; requested?: number; placed?: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
                                  showToast(`LHC 4 complete: removed ${res.removed ?? 0}; ${summary}`);
                               } else {
                                  showToast("Dave's scripts are not available in this build.");

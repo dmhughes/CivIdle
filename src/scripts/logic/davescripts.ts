@@ -15,7 +15,6 @@ import { findSpecialBuilding, getBuildingThatExtract, isWorldOrNaturalWonder } f
 import { Config } from "../../../shared/logic/Config";
 import { getGameState, notifyGameStateUpdate } from "../../../shared/logic/GameStateLogic";
 import { getGrid } from "../../../shared/logic/IntraTickCache";
-
 import type { ICloneBuildingData } from "../../../shared/logic/Tile";
 import { BuildingInputMode, makeBuilding, STOCKPILE_CAPACITY_MAX, STOCKPILE_MAX_MAX } from "../../../shared/logic/Tile";
 import { clearTransportSourceCache } from "../../../shared/logic/Update";
@@ -33,38 +32,23 @@ function ensureVisualRefresh(): void {
 			requestAnimationFrame(() => notifyGameStateUpdate());
 		}
 	} catch (e) {
-		// Best-effort: swallow errors to avoid breaking editor tooling
 		console.error("ensureVisualRefresh failed:", e);
 	}
 }
 
-/**
- * Clear buildings in a rectangular region (inclusive coordinates).
- *
- * Behavior rules:
- * - Will set `tile.building = undefined` for tiles inside the rectangle.
- * - Will NOT remove a building if it is a world or natural wonder.
- * - Will NOT remove a building if the tile has a deposit for which there
- *   exists an extractor building (e.g. a coal/iron/ore mine).
- *
- * Returns an object describing how many tiles were cleared and how many
- * were preserved due to wonders or deposits.
- */
-// Overload: keep existing numeric signature and add a strip-based signature
+// Overload: numeric rectangle or side-based strip signature
 export function clearRange(minX: number, maxX: number, minY: number, maxY: number): { cleared: number; preservedWonders: number; preservedMines: number };
 export function clearRange(side: "left" | "right", width: number, startRow: number, endRow: number): { cleared: number; preservedWonders: number; preservedMines: number };
 export function clearRange(a: number | "left" | "right", b: number, c: number, d: number) {
 	const gs = getGameState();
 
-	// Resolve arguments: support both clearRange(minX,maxX,minY,maxY) and
-	// clearRange(side,width,startRow,endRow).
+	// Resolve args into rectangle bounds
 	let minX: number;
 	let maxX: number;
 	let minY: number;
 	let maxY: number;
 
 	if (a === "left" || a === "right") {
-		// Strip-based signature
 		const side = a as "left" | "right";
 		const width = b;
 		const startRow = c;
@@ -84,22 +68,16 @@ export function clearRange(a: number | "left" | "right", b: number, c: number, d
 			return { cleared: 0, preservedWonders: 0, preservedMines: 0 };
 		}
 
-		const floorMaxX = Math.floor(mapMaxX);
-		const floorMinX = Math.max(0, Math.floor(mapMinX));
-		const floorMaxY = Math.floor(mapMaxY);
-
-		if (side === "right") {
-			maxX = floorMaxX;
-			minX = Math.max(0, maxX - Math.max(0, width - 1));
+		if (side === "left") {
+			minX = Math.max(0, Math.floor(mapMinX));
+			maxX = Math.min(Math.floor(mapMaxX), minX + width - 1);
 		} else {
-			minX = floorMinX;
-			maxX = Math.min(floorMaxX, minX + Math.max(0, width - 1));
+			maxX = Math.floor(mapMaxX);
+			minX = Math.max(0, maxX - (width - 1));
 		}
-
-		minY = Math.max(0, Math.floor(startRow));
-		maxY = Math.min(floorMaxY, Math.floor(endRow));
+		minY = startRow;
+		maxY = Math.min(Math.floor(mapMaxY), endRow);
 	} else {
-		// Numeric signature
 		minX = a as number;
 		maxX = b;
 		minY = c;
@@ -107,66 +85,49 @@ export function clearRange(a: number | "left" | "right", b: number, c: number, d
 	}
 
 	let clearedTotal = 0;
-	// use sets to avoid double-counting preserved tiles across passes
 	const preservedWondersSet = new Set<number>();
 	const preservedMinesSet = new Set<number>();
 
-	const MAX_PASSES = 10;
-
-	for (let pass = 0; pass < MAX_PASSES; pass++) {
-		let passCleared = 0;
-
+	for (let y = minY; y <= maxY; y++) {
 		for (let x = minX; x <= maxX; x++) {
-			for (let y = minY; y <= maxY; y++) {
-				const xy = pointToTile({ x, y });
-				const td = gs.tiles.get(xy);
-				if (!td || !td.building) continue;
+			const xy = pointToTile({ x, y });
+			const td = gs.tiles.get(xy);
+			if (!td || !td.building) continue;
 
-				const type = td.building.type;
-
-				// Never remove Wonders
-				if (isWorldOrNaturalWonder(type)) {
-					preservedWondersSet.add(xy);
-					continue;
-				}
-
-				// Never remove a tile that sits on an important deposit that has a corresponding
-				// extractor building defined in the game config, unless that extractor
-				// is not actually present on this tile (we only preserve true extractor)
-				let hasProtectedDeposit = false;
-				let isExtractorBuildingPresent = false;
-				for (const depositKey of Object.keys(td.deposit) as Deposit[]) {
-					if (!td.deposit[depositKey]) continue;
-					const extractor = getBuildingThatExtract(depositKey);
-					if (extractor) {
-						hasProtectedDeposit = true;
-						if (td.building.type === extractor) {
-							isExtractorBuildingPresent = true;
-						}
-						break;
-					}
-				}
-
-				if (hasProtectedDeposit && isExtractorBuildingPresent) {
-					preservedMinesSet.add(xy);
-					continue;
-				}
-
-				// Safe to delete (either no protected deposit, or the deposit's
-				// extractor isn't present here and we want to allow deletion)
-				td.building = undefined; // Clear the building
-				passCleared++;
+			// Never remove wonders
+			if (isWorldOrNaturalWonder(td.building.type)) {
+				preservedWondersSet.add(xy);
+				continue;
 			}
-		}
 
-		// If nothing was deleted this pass we're done; otherwise update totals
-		if (passCleared === 0) break;
-		clearedTotal += passCleared;
-		clearTransportSourceCache();
-		// allow visuals to catch up between passes
-		ensureVisualRefresh();
+			// If the tile has a deposit that has an extractor type defined in config,
+			// and that extractor is present on this tile, preserve it.
+			let hasProtectedDeposit = false;
+			let isExtractorBuildingPresent = false;
+			for (const depositKey of Object.keys(td.deposit) as Deposit[]) {
+				if (!td.deposit[depositKey]) continue;
+				const extractor = getBuildingThatExtract(depositKey);
+				if (extractor) {
+					hasProtectedDeposit = true;
+					if (td.building.type === extractor) {
+						isExtractorBuildingPresent = true;
+					}
+					break;
+				}
+			}
+			if (hasProtectedDeposit && isExtractorBuildingPresent) {
+				preservedMinesSet.add(xy);
+				continue;
+			}
+
+			// Safe to delete
+			td.building = undefined;
+			clearedTotal++;
+		}
 	}
 
+	if (clearedTotal > 0) clearTransportSourceCache();
+	ensureVisualRefresh();
 	return { cleared: clearedTotal, preservedWonders: preservedWondersSet.size, preservedMines: preservedMinesSet.size };
 }
 
@@ -195,7 +156,7 @@ export function buildBuildingsInRange(
 } {
 	const gs = getGameState();
 	let skippedWonders = 0;
-	const skippedMines = 0;
+	let skippedMines = 0;
 
 	// Build a linear list of tile coordinates in scan order (rows top->bottom, left->right)
 	const coords: { x: number; y: number }[] = [];
@@ -205,18 +166,27 @@ export function buildBuildingsInRange(
 		}
 	}
 
-	// Sort specs by building tier (ascending) so lower-tier buildings with fewer
-	// dependencies are started first. We operate on a shallow copy so the
-	// caller's array is not mutated.
+	// Sort specs by building tier (ascending) so lower-tier buildings are placed first.
 	const sortedSpecs = [...specs].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
 
 	const results: Array<{ type: Building; requested: number; placed: number }> = [];
-	let cursor = 0; // index into coords
+	let cursor = 0;
 
 	for (const spec of sortedSpecs) {
 		const requested = spec.count;
-		const targetLevel = spec.targetLevel ?? 1;
+		const targetLevel = spec.targetLevel ?? 10;
 		let placed = 0;
+
+		// Defensive: skip unknown building types
+		try {
+			if (!Config.Building[spec.type]) {
+				results.push({ type: spec.type, requested, placed: 0 });
+				continue;
+			}
+		} catch (e) {
+			results.push({ type: spec.type, requested, placed: 0 });
+			continue;
+		}
 
 		while (placed < requested && cursor < coords.length) {
 			const { x, y } = coords[cursor++];
@@ -224,37 +194,42 @@ export function buildBuildingsInRange(
 			const td = gs.tiles.get(xy);
 			if (!td) continue;
 
-			// Only build on empty tiles. If occupied, skip it. Count wonders separately.
-			if (td.building) {
-				if (isWorldOrNaturalWonder(td.building.type)) {
-					skippedWonders++;
-				}
-				// occupied (non-wonder) tiles are skipped silently
+			// Never overwrite wonders
+			if (td.building && isWorldOrNaturalWonder(td.building.type)) {
+				skippedWonders++;
 				continue;
 			}
 
-			// Create building at level 0 and set desiredLevel so the game's
-			// construction logic applies (resources reserved, building set to 'building').
-			const b = makeBuilding({ type: spec.type, level: 0, desiredLevel: targetLevel });
-			// Apply 'highest' stockpile and input/priority settings so construction
-			// and resource intake are maximized and the building is ready to accept
-			// resources immediately.
-			b.stockpileCapacity = STOCKPILE_CAPACITY_MAX;
-			b.stockpileMax = STOCKPILE_MAX_MAX;
-			b.inputMode = BuildingInputMode.StoragePercentage;
-			b.maxInputDistance = Number.POSITIVE_INFINITY;
+			// If this tile has a deposit which maps to an extractor, and the
+			// extractor building is present here, preserve it (don't overwrite).
+			let hasProtectedDeposit = false;
+			let isExtractorPresent = false;
+			for (const depositKey of Object.keys(td.deposit) as Deposit[]) {
+				if (!td.deposit[depositKey]) continue;
+				const extractor = getBuildingThatExtract(depositKey);
+				if (extractor) {
+					hasProtectedDeposit = true;
+					if (td.building && td.building.type === extractor) isExtractorPresent = true;
+					break;
+				}
+			}
+			if (hasProtectedDeposit && isExtractorPresent) {
+				skippedMines++;
+				continue;
+			}
+
+			// Overwrite existing non-wonder/non-protected tiles.
+			const b = makeBuilding({ type: spec.type, level: targetLevel, desiredLevel: targetLevel });
 			td.building = b;
 			placed++;
 		}
 
 		results.push({ type: spec.type, requested, placed });
-		// If we ran out of tiles, stop processing further specs
 		if (cursor >= coords.length) break;
 	}
 
 	if (results.some((r) => r.placed > 0)) clearTransportSourceCache();
 	ensureVisualRefresh();
-
 	return { results, skippedWonders, skippedMines };
 }
 
@@ -625,7 +600,7 @@ export async function replaceApartmentsWithCondos(): Promise<{
 
     // Build Condos into the left 25-strip starting at row 0
     const plan = [{ type: ("Condo" as Building), count: TOTAL, level: 10 }];
-    const res = await doBuildingPlan("left", 25, plan, 0, 0);
+    const res = await doBuildingPlan("left", 25, plan, 0, 100);
 
     const placed = res?.results && res.results.length > 0 ? res.results[0].placed : 0;
 
@@ -645,12 +620,12 @@ export async function replaceApartmentsWithCondos(): Promise<{
  * - Place electrified buildings starting at row 25 (index 24) downwards; ensure a CoalPowerPlant
  *   is placed at the start of the electrified block to provide power.
  */
-export function prepareCnTowerMaterials(): {
-	nonElectPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
-	cleared: { cleared: number; preservedWonders: number; preservedMines: number } | null;
-	electPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
-	message?: string;
-} {
+export async function prepareCnTowerMaterials(): 
+	Promise<{ nonElectPlacement: 
+		{ results: Array<{ type: Building; requested: number; placed: number; }>; } | null; 
+			cleared: { cleared: number; preservedWonders: number; preservedMines: number; } | null; 
+			electPlacement: { results: Array<{ type: Building; requested: number; placed: number; }>; } | null; 
+			message?: string; }> {
 	const gs = getGameState();
 
 	// CN Tower building list (name -> count). The fourth arg in the user's list is the quantity.
@@ -663,7 +638,6 @@ export function prepareCnTowerMaterials(): {
 		{ type: "PublishingHouse" as Building, count: 4 },
 		{ type: "Stadium" as Building, count: 2 },
 		{ type: "MovieStudio" as Building, count: 5 },
-		{ type: "CoalPowerPlant" as Building, count: 1 },
 		{ type: "MagazinePublisher" as Building, count: 4 },
 		{ type: "Embassy" as Building, count: 4 },
 		{ type: "RadioStation" as Building, count: 8 },
@@ -675,7 +649,6 @@ export function prepareCnTowerMaterials(): {
 		{ type: "University" as Building, count: 4 },
 		{ type: "ActorsGuild" as Building, count: 1 },
 		{ type: "CottonMill" as Building, count: 1 },
-		{ type: "CoalPowerPlant" as Building, count: 1 },
 		{ type: "PaintersGuild" as Building, count: 1 },
 		{ type: "Museum" as Building, count: 3 },
 		{ type: "Courthouse" as Building, count: 3 },
@@ -702,9 +675,7 @@ export function prepareCnTowerMaterials(): {
 	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
 
 	// Clear rows 7..10 -> indexes 6..9
-	const clearMinY = 6;
-	const clearMaxY = 9;
-	const cleared = clearRange(minX, maxX, clearMinY, clearMaxY);
+	const cleared = clearRange(minX, maxX, 6, 9);
 
 	// Split cnList into electrified vs non-electrified using the building
 	// definition `power` flag: a building with `Config.Building[<type>].power === true`
@@ -717,7 +688,7 @@ export function prepareCnTowerMaterials(): {
 			const def = Config.Building[item.type];
 			const requiresPower = !!(def && def.power === true);
 			if (requiresPower) {
-				electSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
+ 				electSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
 			} else {
 				nonElectSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
 			}
@@ -727,145 +698,97 @@ export function prepareCnTowerMaterials(): {
 		}
 	}
 
-	// Place non-electrified in rows 7..13 (indexes 6..12)
-	const nonMinY = 6;
-	const nonMaxY = Math.min(Math.floor(mapMaxY), 12);
-	const nonElectPlacement = buildBuildingsInRange(minX, maxX, nonMinY, nonMaxY, nonElectSpecs);
-
-	// Ensure a coal power plant exists at start of electrified block and then place electrified buildings
-	const electStartY = 24; // index 24 == row 25
-	const electEndY = Math.floor(mapMaxY);
-
-	// Remove any CoalPowerPlant entries from electSpecs to avoid duplicate and then add one at start
-	const filteredElectSpecs = electSpecs.filter((s) => s.type !== ("CoalPowerPlant" as Building));
-	const electWithCoal = [{ type: "CoalPowerPlant" as Building, count: 1, targetLevel: 15 }, ...filteredElectSpecs];
-
-	const electPlacement = buildBuildingsInRange(minX, maxX, electStartY, electEndY, electWithCoal);
+	const nonElectrified = await doBuildingPlan("right", 10, nonElectSpecs, 6, 200);
+	const electrified = await doBuildingPlan("right", 10, electSpecs, 24, 200);
 
 	ensureVisualRefresh();
-	return { nonElectPlacement: { results: nonElectPlacement.results }, cleared, electPlacement: { results: electPlacement.results } };
+	return { nonElectPlacement: { results: nonElectrified.results }, cleared, electPlacement: { results: electrified.results } };
 }
 
 
-	/**
-	 * 007 - Prepare Atomium and Oxford University materials
-	 *
-	 * - Clear rows 7..13 (indexes 6..12) and rows 25..30 (indexes 24..29)
-	 *   in the rightmost 10-tile band.
-	 * - From the provided building list, split into those that REQUIRE power
-	 *   (Config.Building[...].power === true) and those that do not.
-	 * - Place non-powered buildings into rows 7..13 (indexes 6..12).
-	 * - Place powered buildings starting at row 25 (index 24) and ensure a
-	 *   CoalPowerPlant exists at the start of the powered block.
-	 */
-	export function prepareAtomiumAndOxUni(): {
-		nonElectPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
-		clearedTop: { cleared: number; preservedWonders: number; preservedMines: number } | null;
-		clearedBottom: { cleared: number; preservedWonders: number; preservedMines: number } | null;
-		electPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
-		message?: string;
-	} {
-		const gs = getGameState();
+// 007 - Prepare Atomium and Oxford University materials
+export async function prepareAtomiumAndOxUni(): Promise<{
+	nonElectPlacement: { results: Array<{ type: Building; requested: number; placed: number; }>; } | null;
+	clearedTop: { cleared: number; preservedWonders: number; preservedMines: number; } | null;
+	clearedBottom: { cleared: number; preservedWonders: number; preservedMines: number; } | null;
+	electPlacement: { results: Array<{ type: Building; requested: number; placed: number; }>; } | null;
+	message?: string;
+}> {
 
-		// Building plan (type -> count)
-		const plan: Array<{ type: Building; count: number }> = [
-			{ type: "GunpowderMill" as Building, count: 2 },
-			{ type: "PoetrySchool" as Building, count: 3 },
-			{ type: "PaperMaker" as Building, count: 1 },
-			{ type: "Brewery" as Building, count: 1 },
-			{ type: "Stable" as Building, count: 1 },
-			{ type: "UraniumEnrichmentPlant" as Building, count: 20 },
-			{ type: "DynamiteWorkshop" as Building, count: 3 },
-			{ type: "RifleFactory" as Building, count: 3 },
-			{ type: "Shrine" as Building, count: 2 },
-			{ type: "AtomicFacility" as Building, count: 6 },
-			{ type: "GatlingGunFactory" as Building, count: 3 },
-			{ type: "University" as Building, count: 3 },
-			{ type: "ArtilleryFactory" as Building, count: 10 },
-		];
+	const gs = getGameState();
 
-		// Determine map bounds
-		let mapMaxX = Number.NEGATIVE_INFINITY;
-		let mapMaxY = Number.NEGATIVE_INFINITY;
-		for (const xy of gs.tiles.keys()) {
-			const p = tileToPoint(xy);
-			if (p.x > mapMaxX) mapMaxX = p.x;
-			if (p.y > mapMaxY) mapMaxY = p.y;
-		}
+	const plan: Array<{ type: Building; count: number }> = [
+		{ type: "GunpowderMill" as Building, count: 2 },
+		{ type: "PoetrySchool" as Building, count: 3 },
+		{ type: "PaperMaker" as Building, count: 1 },
+		{ type: "Brewery" as Building, count: 1 },
+		{ type: "Stable" as Building, count: 1 },
+		{ type: "UraniumEnrichmentPlant" as Building, count: 20 },
+		{ type: "DynamiteWorkshop" as Building, count: 3 },
+		{ type: "RifleFactory" as Building, count: 3 },
+		{ type: "Shrine" as Building, count: 2 },
+		{ type: "AtomicFacility" as Building, count: 6 },
+		{ type: "GatlingGunFactory" as Building, count: 3 },
+		{ type: "University" as Building, count: 3 },
+		{ type: "ArtilleryFactory" as Building, count: 10 },
+	];
 
-		if (mapMaxX === Number.NEGATIVE_INFINITY) {
-			return { nonElectPlacement: null, clearedTop: null, clearedBottom: null, electPlacement: null, message: "No map tiles available" };
-		}
+	// Determine map bounds
+	let mapMaxX = Number.NEGATIVE_INFINITY;
+	let mapMaxY = Number.NEGATIVE_INFINITY;
+	for (const xy of gs.tiles.keys()) {
+		const p = tileToPoint(xy);
+		if (p.x > mapMaxX) mapMaxX = p.x;
+		if (p.y > mapMaxY) mapMaxY = p.y;
+	}
 
-		const maxX = Math.floor(mapMaxX);
-		const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
+	if (mapMaxX === Number.NEGATIVE_INFINITY) {
+		return { nonElectPlacement: null, clearedTop: null, clearedBottom: null, electPlacement: null, message: "No map tiles available" };
+	}
 
-		// Clear top band rows 7..13 -> indexes 6..12
-		const topMinY = 6;
-		const topMaxY = Math.min(Math.floor(mapMaxY), 12);
-		const clearedTop = clearRange(minX, maxX, topMinY, topMaxY);
+	const maxX = Math.floor(mapMaxX);
+	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
 
-		// Clear bottom band rows 25..30 -> indexes 24..29
-		const bottomMinY = 24;
-		const bottomMaxY = Math.min(Math.floor(mapMaxY), 29);
-		const clearedBottom = clearRange(minX, maxX, bottomMinY, bottomMaxY);
+	// Clear top band rows 7..13 -> indexes 6..12
+	const clearedTop = clearRange(minX, maxX, 6, 12);
 
-	// After clearing, ensure uranium and aluminium supply by placing
-	// mines using the buildMines helper which respects deposits and
-	// never overwrites existing mines.
-	// Place 6 Uranium mines and 3 Aluminum extractors.
+	// Clear bottom band rows 25..30 -> indexes 24..29
+	const clearedBottom = clearRange(minX, maxX, 24, 29);
+
 	buildMines("UraniumMine" as Building, 15, 6);
 	buildMines("AluminumSmelter" as Building, 15, 3);
 
-		// Split plan by Config.Building[...].power === true
-		const nonElectSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
-		const electSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
-		for (const item of plan) {
-			try {
-				const def = Config.Building[item.type];
-				const requiresPower = !!(def && def.power === true);
-				if (requiresPower) electSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
-				else nonElectSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
-			} catch (e) {
-				// Conservative fallback
-				nonElectSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
-			}
+	// Split plan by Config.Building[...].power === true
+	const nonElectSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
+	const electSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
+	for (const item of plan) {
+		try {
+			const def = Config.Building[item.type];
+			const requiresPower = !!(def && def.power === true);
+			if (requiresPower) electSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
+			else nonElectSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
+		} catch (e) {
+			// Conservative fallback
+			nonElectSpecs.push({ type: item.type, count: item.count, targetLevel: 15 });
 		}
-
-		// Place non-powered in rows 7..13
-		const nonPlacement = buildBuildingsInRange(minX, maxX, topMinY, topMaxY, nonElectSpecs);
-
-		// Ensure a CoalPowerPlant at start of electrified block and then place powered buildings
-		const electStartY = 24;
-		const electEndY = Math.floor(mapMaxY);
-		const filteredElect = electSpecs.filter((s) => s.type !== ("CoalPowerPlant" as Building));
-		const electWithCoal = [{ type: "CoalPowerPlant" as Building, count: 1, targetLevel: 15 }, ...filteredElect];
-		const electPlacement = buildBuildingsInRange(minX, maxX, electStartY, electEndY, electWithCoal);
-
-		ensureVisualRefresh();
-		return { nonElectPlacement: { results: nonPlacement.results }, clearedTop, clearedBottom, electPlacement: { results: electPlacement.results } };
 	}
 
+	const nonElectrified = await doBuildingPlan("right", 10, nonElectSpecs, 6, 200);
+	const electPlacement = await doBuildingPlan("right", 10, electSpecs, 24, 200);
 
-/**
- * 008 - Prepare Clone Labs
- *
- * - Clear rows 7..13 (indexes 6..12) and rows 25..30 (indexes 24..29)
- *   in the rightmost 10-tile band.
- * - From the provided building list, split into those that REQUIRE power
- *   (Config.Building[...].power === true) and those that do not.
- * - Place non-powered buildings into rows 7..13 (indexes 6..12).
- * - Place powered buildings starting at row 25 (index 24) and ensure a
- *   CoalPowerPlant exists at the start of the powered block.
- */
-export function prepareCloneLabs(): {
-	nonElectPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
-	clearedTop: { cleared: number; preservedWonders: number; preservedMines: number } | null;
-	clearedBottom: { cleared: number; preservedWonders: number; preservedMines: number } | null;
-	electPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
-	message?: string;
-} {
-	const gs = getGameState();
+	ensureVisualRefresh();
+	return { nonElectPlacement: { results: nonElectrified.results }, clearedTop, clearedBottom, electPlacement: { results: electPlacement.results } };
+}
+
+// 008 - Prepare Clone Labs
+export async function prepareCloneLabs(): 
+	Promise<{ nonElectPlacement: { results: Array<{ type: Building; requested: number; placed: number; }>; } | null; 
+				clearedTop: { cleared: number; preservedWonders: number; preservedMines: number; } | null; 
+				clearedBottom: { cleared: number; preservedWonders: number; preservedMines: number; } | null; 
+				electPlacement: { results: Array<{ type: Building; requested: number; placed: number; }>; } | null; 
+				message?: string; }> {
+	
+					const gs = getGameState();
 
 	// Building plan (type -> count) derived from user spec
 	const plan: Array<{ type: Building; count: number }> = [
@@ -911,20 +834,10 @@ export function prepareCloneLabs(): {
 	const maxX = Math.floor(mapMaxX);
 	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
 
-	// Clear top band rows 7..13 -> indexes 6..12
-	const topMinY = 6;
-	const topMaxY = Math.min(Math.floor(mapMaxY), 12);
-	const clearedTop = clearRange(minX, maxX, topMinY, topMaxY);
+	const clearedTop = clearRange(minX, maxX, 6, 12);
+	const clearedBottom = clearRange(minX, maxX, 24, 29);
 
-		// Clear bottom band rows 25..30 -> indexes 24..29
-		const bottomMinY = 24;
-		const bottomMaxY = Math.min(Math.floor(mapMaxY), 29);
-		const clearedBottom = clearRange(minX, maxX, bottomMinY, bottomMaxY);
-
-		// After clearing, ensure oil supply by placing oil wells using buildMines helper
-		// buildMines respects deposits and never overwrites existing mines.
-		// Place 3 OilWell mines.
-		buildMines("OilWell" as Building, 15, 3);
+	buildMines("OilWell" as Building, 15, 3);
 
 	// Split plan by Config.Building[...].power === true
 	const nonElectSpecs: Array<{ type: Building; count: number; targetLevel?: number }> = [];
@@ -942,30 +855,15 @@ export function prepareCloneLabs(): {
 	}
 
 	// Place non-powered in rows 7..13
-	const nonPlacement = buildBuildingsInRange(minX, maxX, topMinY, topMaxY, nonElectSpecs);
-
-	// Ensure a CoalPowerPlant at start of electrified block and then place powered buildings
-	const electStartY = 24;
-	const electEndY = Math.floor(mapMaxY);
-	const filteredElect = electSpecs.filter((s) => s.type !== ("CoalPowerPlant" as Building));
-	const electWithCoal = [{ type: "CoalPowerPlant" as Building, count: 1, targetLevel: 15 }, ...filteredElect];
-	const electPlacement = buildBuildingsInRange(minX, maxX, electStartY, electEndY, electWithCoal);
-
+	const nonElectrified = await doBuildingPlan("right", 10, nonElectSpecs, 6, 200);
+	const electrified = await doBuildingPlan("right", 10, electSpecs, 24, 200);
+	
 	ensureVisualRefresh();
-	return { nonElectPlacement: { results: nonPlacement.results }, clearedTop, clearedBottom, electPlacement: { results: electPlacement.results } };
+	return { nonElectPlacement: { results: nonElectrified.results }, clearedTop, clearedBottom, electPlacement: { results: electrified.results } };
 }
 
 
-/**
- * Build Clone Labs
- *
- * - Delete Condo buildings but leave 20 Condos in place (do not create new Condos).
- * - Build 860 CloneLab buildings in the left-hand 20-tile-wide strip starting at y=0.
- * - Build in batches of 100 (chunks) and wait for each chunk to complete like
- *   deployApartments/replaceApartmentsWithCondos.
- * - After placing CloneLab buildings, set their cloning input resource to
- *   "Spacecraft" (the default is "Computer").
- */
+// 009 - Build Clone Labs
 export async function buildCloneLabs(): Promise<{
 	requested: number;
 	placed: number;
@@ -975,7 +873,6 @@ export async function buildCloneLabs(): Promise<{
 	message?: string;
 }> {
 	const TOTAL = 860;
-	const CHUNK = 100;
 	const gs = getGameState();
 
 	// Remove Condo buildings but ensure the 20 that remain are from the
@@ -1046,79 +943,26 @@ export async function buildCloneLabs(): Promise<{
 	const minY = 0;
 	const maxY = Math.floor(mapMaxY);
 
-	let remaining = TOTAL;
-	let totalPlaced = 0;
-	const chunks: number[] = [];
+	// Use the simple doBuildingPlan to place all CloneLabs sequentially.
+	const plan = [{ type: ("CloneLab" as Building), count: TOTAL, level: 10 }];
+	const res = await doBuildingPlan("left", 20, plan, 0, 0);
 
-	const countCompleted = (): number => {
-		const s = getGameState();
-		let c = 0;
-		for (const [xy, td] of s.tiles.entries()) {
-			if (!td || !td.building) continue;
-			const p = tileToPoint(xy);
-			if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
-			if (td.building.type === ("CloneLab" as Building) && td.building.status === "completed") c++;
-		}
-		return c;
-	};
+	const placed = res?.results && res.results.length > 0 ? res.results[0].placed : 0;
 
-	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-	while (remaining > 0) {
-		const chunkSize = Math.min(CHUNK, remaining);
-
-		const res = buildBuildingsInRange(minX, maxX, minY, maxY, [
-			{ type: "CloneLab" as Building, count: chunkSize, targetLevel: 10 },
-		]);
-
-		const placed = res.results.length > 0 ? res.results[0].placed : 0;
-		chunks.push(placed);
-		totalPlaced += placed;
-		remaining -= placed;
-
-		if (placed > 0) {
-			// Immediately set CloneLab inputResource to "Spacecraft" for any newly
-			// placed CloneLabs inside the strip so they default to cloning
-			// Spacecraft instead of Computer.
-			for (const [xy, td] of getGameState().tiles.entries()) {
-				if (!td || !td.building) continue;
-				const p = tileToPoint(xy);
-				if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
-				if (td.building.type === ("CloneLab" as Building)) {
-					// ICloneBuildingData has inputResource and transportedAmount
-					(td.building as ICloneBuildingData).inputResource = "Spacecraft";
-					if ((td.building as ICloneBuildingData).transportedAmount === undefined) (td.building as ICloneBuildingData).transportedAmount = 0;
-				}
-			}
-			clearTransportSourceCache();
-			ensureVisualRefresh();
-		}
-
-		if (placed === 0) {
-			// nothing could be placed (no empty tiles) — abort to avoid infinite loop
-			break;
-		}
-
-		// Wait until the newly placed buildings in this chunk are completed.
-		const completedBefore = countCompleted();
-		const need = placed;
-		const MAX_WAIT_MS = 5 * 60 * 1000; // 5 minutes max per chunk
-		const POLL_MS = 1000;
-		let waited = 0;
-		while (true) {
-			await sleep(POLL_MS);
-			waited += POLL_MS;
-			const completedAfter = countCompleted();
-			if (completedAfter - completedBefore >= need) break;
-			if (waited >= MAX_WAIT_MS) {
-				// give up waiting for this chunk and continue with next (or abort)
-				break;
-			}
+	// Ensure all CloneLabs in the left strip have inputResource set to "Spacecraft"
+	for (const [xy, td] of getGameState().tiles.entries()) {
+		if (!td || !td.building) continue;
+		const p = tileToPoint(xy);
+		if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
+		if (td.building.type === ("CloneLab" as Building)) {
+			(td.building as ICloneBuildingData).inputResource = "Spacecraft";
+			if ((td.building as ICloneBuildingData).transportedAmount === undefined) (td.building as ICloneBuildingData).transportedAmount = 0;
 		}
 	}
 
+	if (placed > 0) clearTransportSourceCache();
 	ensureVisualRefresh();
-	return { requested: TOTAL, placed: totalPlaced, remaining, chunks, removedCondos: removed };
+	return { requested: TOTAL, placed, remaining: Math.max(0, TOTAL - placed), chunks: [], removedCondos: removed };
 }
 
 
@@ -1332,23 +1176,14 @@ export async function dysonBuildPlan2(): Promise<{
 
 	// Place one building at a time with a 200ms gap between placements.
 	for (const spec of validPlan) {
-		for (let i = 0; i < spec.count; i++) {
-			let res: { results: Array<{ type: Building; requested: number; placed: number }>; skippedWonders: number; skippedMines: number } | undefined;
-			try {
-				res = buildBuildingsInRange(minX, maxX, startY, endY, [
-					{ type: spec.type, count: 1, targetLevel: 10 },
-				]);
-			} catch (e) {
-				console.error("dysonBuildPlan2: placement failed for", spec.type, e);
-				break; // stop trying this type
-			}
-			const placed = res.results.length > 0 ? res.results[0].placed : 0;
+		// Use centralized sequential placer to request the full count with 200ms spacing.
+		try {
+			const dp = await doBuildingPlan("right", 10, [{ type: spec.type, count: spec.count, level: 10 }], startY, 200);
+			const placed = dp.results.length > 0 ? dp.results[0].placed : 0;
 			const entry = summaryMap.get(spec.type);
 			if (entry) entry.placed += placed;
-			// If nothing could be placed, abort remaining placements for this type
-			if (placed === 0) break;
-			// Wait 200ms between placements so the UI has time to show incremental progress
-			await sleep(200);
+		} catch (e) {
+			console.error("dysonBuildPlan2: placement failed for", spec.type, e);
 		}
 	}
 
@@ -1440,21 +1275,14 @@ export async function dysonBuildPlan2(): Promise<{
 				continue;
 			}
 
-			for (let i = 0; i < item.total; i++) {
-				let res: { results: Array<{ type: Building; requested: number; placed: number }>; skippedWonders: number; skippedMines: number } | undefined;
-				try {
-					res = buildBuildingsInRange(minX, maxX, minY, maxY, [ { type: item.type, count: 1, targetLevel: 10 } ]);
-				} catch (e) {
-					console.error("aldersonDisc4: placement failed for", item.type, e);
-					break;
-				}
-
-				const placed = res && res.results.length > 0 ? res.results[0].placed : 0;
+			// Place the requested total sequentially using doBuildingPlan in the leftmost 20-tile strip.
+			try {
+				const dp = await doBuildingPlan("left", 20, [{ type: item.type, count: item.total, level: 10 }], 0, 200);
+				const placed = dp.results.length > 0 ? dp.results[0].placed : 0;
 				summaryEntry.placed += placed;
 				summaryEntry.remaining -= placed;
-				if (placed === 0) break; // no space left
-				// small delay so UI shows incremental progress
-				await sleep(200);
+			} catch (e) {
+				console.error("aldersonDisc4: placement failed for", item.type, e);
 			}
 
 			results.push(summaryEntry);
@@ -1616,18 +1444,14 @@ export async function dysonBuildPlan2(): Promise<{
 		const sortedPlan = [...validPlan].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
 
 		for (const spec of sortedPlan) {
-			for (let i = 0; i < spec.count; i++) {
-				try {
-					const res = buildBuildingsInRange(minX, maxX, startY, endY, [{ type: spec.type, count: 1, targetLevel: 10 }]);
-					const placed = res.results.length > 0 ? res.results[0].placed : 0;
-					const entry = summaryMap.get(spec.type);
-					if (entry) entry.placed += placed;
-					if (placed === 0) break; // no more space for this type
-					await sleep(200);
-				} catch (e) {
-					console.error("largeHadronCollider2: placement failed for", spec.type, e);
-					break;
-				}
+			// Use doBuildingPlan to sequentially place the requested count into the rightmost 10-tile band.
+			try {
+				const dp = await doBuildingPlan("right", 10, [{ type: spec.type, count: spec.count, level: 10 }], startY, 200);
+				const placed = dp.results.length > 0 ? dp.results[0].placed : 0;
+				const entry = summaryMap.get(spec.type);
+				if (entry) entry.placed += placed;
+			} catch (e) {
+				console.error("largeHadronCollider2: placement failed for", spec.type, e);
 			}
 		}
 
@@ -1747,18 +1571,14 @@ export async function dysonBuildPlan2(): Promise<{
 		const sortedPlan = [...validPlan].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
 
 		for (const spec of sortedPlan) {
-			for (let i = 0; i < spec.count; i++) {
-				try {
-					const res = buildBuildingsInRange(minX, maxX, startY, endY, [{ type: spec.type, count: 1, targetLevel: 10 }]);
-					const placed = res.results.length > 0 ? res.results[0].placed : 0;
-					const entry = summaryMap.get(spec.type);
-					if (entry) entry.placed += placed;
-					if (placed === 0) break;
-					await sleep(200);
-				} catch (e) {
-					console.error("largeHadronCollider3: placement failed for", spec.type, e);
-					break;
-				}
+			// Place the whole requested count sequentially using doBuildingPlan (right 10-band)
+			try {
+				const dp = await doBuildingPlan("right", 10, [{ type: spec.type, count: spec.count, level: 10 }], startY, 200);
+				const placed = dp.results.length > 0 ? dp.results[0].placed : 0;
+				const entry = summaryMap.get(spec.type);
+				if (entry) entry.placed += placed;
+			} catch (e) {
+				console.error("largeHadronCollider3: placement failed for", spec.type, e);
 			}
 		}
 
@@ -1820,33 +1640,26 @@ export async function dysonBuildPlan4(): Promise<{
 	// Build one-by-one with 200ms gap between placements (matches dysonBuildPlan2/3)
 	for (const item of leftPlan) {
 		const summaryEntry = { type: item.type, requested: item.total, placed: 0, remaining: item.total };
-		for (let i = 0; i < item.total; i++) {
-			// Defensive: skip unknown building types
-			try {
-				if (!Config.Building[item.type]) {
-					console.warn("dysonBuildPlan4: unknown building type, skipping:", item.type);
-					break;
-				}
-			} catch (e) {
-				console.warn("dysonBuildPlan4: Config check failed for", item.type, e);
-				break;
+		// Defensive: skip unknown building types
+		try {
+			if (!Config.Building[item.type]) {
+				console.warn("dysonBuildPlan4: unknown building type, skipping:", item.type);
+				results.push(summaryEntry);
+				continue;
 			}
+		} catch (e) {
+			console.warn("dysonBuildPlan4: Config check failed for", item.type, e);
+			results.push(summaryEntry);
+			continue;
+		}
 
-			let res: { results: Array<{ type: Building; requested: number; placed: number }>; skippedWonders: number; skippedMines: number } | undefined;
-			try {
-				res = buildBuildingsInRange(minX, maxX, minY, maxY, [ { type: item.type, count: 1, targetLevel: 10 } ]);
-			} catch (e) {
-				console.error("dysonBuildPlan4: placement failed for", item.type, e);
-				break;
-			}
-
-			const placed = res.results.length > 0 ? res.results[0].placed : 0;
+		try {
+			const dp = await doBuildingPlan("left", 20, [{ type: item.type, count: item.total, level: 10 }], 0, 200);
+			const placed = dp.results.length > 0 ? dp.results[0].placed : 0;
 			summaryEntry.placed += placed;
 			summaryEntry.remaining -= placed;
-			if (placed === 0) break; // no progress
-
-			// small delay so the UI shows incremental progress
-			await sleep(200);
+		} catch (e) {
+			console.error("dysonBuildPlan4: placement failed for", item.type, e);
 		}
 
 		results.push(summaryEntry);
@@ -1942,20 +1755,14 @@ export async function largeHadronCollider4(): Promise<{
 			continue;
 		}
 
-		for (let i = 0; i < item.total; i++) {
-			let res: { results: Array<{ type: Building; requested: number; placed: number }>; skippedWonders: number; skippedMines: number } | undefined;
-			try {
-				res = buildBuildingsInRange(minX, maxX, minY, maxY, [{ type: item.type, count: 1, targetLevel: 10 }]);
-			} catch (e) {
-				console.error("largeHadronCollider4: placement failed for", item.type, e);
-				break;
-			}
-
-			const placed = res && res.results.length > 0 ? res.results[0].placed : 0;
+		// Place the requested total sequentially using doBuildingPlan (left, 25-wide)
+		try {
+			const dp = await doBuildingPlan("left", 25, [{ type: item.type, count: item.total, level: 10 }], 0, 200);
+			const placed = dp && dp.results.length > 0 ? dp.results[0].placed : 0;
 			summaryEntry.placed += placed;
 			summaryEntry.remaining -= placed;
-			if (placed === 0) break; // no space left
-			await sleep(200);
+		} catch (e) {
+			console.error("largeHadronCollider4: placement failed for", item.type, e);
 		}
 
 		results.push(summaryEntry);
@@ -2210,18 +2017,14 @@ export async function buildSpaceCenter3(): Promise<{
 	const sortedPlan = [...validPlan].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
 
 	for (const spec of sortedPlan) {
-		for (let i = 0; i < spec.count; i++) {
-			try {
-				const res = buildBuildingsInRange(minX, maxX, startY, endY, [{ type: spec.type, count: 1, targetLevel: 10 }]);
-				const placed = res.results.length > 0 ? res.results[0].placed : 0;
-				const entry = summaryMap.get(spec.type);
-				if (entry) entry.placed += placed;
-				if (placed === 0) break;
-				await sleep(200);
-			} catch (e) {
-				console.error("buildSpaceCenter3: placement failed for", spec.type, e);
-				break;
-			}
+		// Place the full requested count sequentially into the rightmost 10-tile band.
+		try {
+			const dp = await doBuildingPlan("right", 10, [{ type: spec.type, count: spec.count, level: 10 }], startY, 200);
+			const placed = dp.results.length > 0 ? dp.results[0].placed : 0;
+			const entry = summaryMap.get(spec.type);
+			if (entry) entry.placed += placed;
+		} catch (e) {
+			console.error("buildSpaceCenter3: placement failed for", spec.type, e);
 		}
 	}
 
@@ -2306,20 +2109,14 @@ export async function buildSpaceCenter4(): Promise<{
 			continue;
 		}
 
-		for (let i = 0; i < item.total; i++) {
-			let res: { results: Array<{ type: Building; requested: number; placed: number }>; skippedWonders: number; skippedMines: number } | undefined;
-			try {
-				res = buildBuildingsInRange(minX, maxX, minY, maxY, [{ type: item.type, count: 1, targetLevel: 10 }]);
-			} catch (e) {
-				console.error("buildSpaceCenter4: placement failed for", item.type, e);
-				break;
-			}
-
-			const placed = res && res.results.length > 0 ? res.results[0].placed : 0;
+		// Place requested total sequentially in the left 25-tile strip using doBuildingPlan
+		try {
+			const dp = await doBuildingPlan("left", 25, [{ type: item.type, count: item.total, level: 10 }], 0, 200);
+			const placed = dp && dp.results.length > 0 ? dp.results[0].placed : 0;
 			summaryEntry.placed += placed;
 			summaryEntry.remaining -= placed;
-			if (placed === 0) break; // no space left
-			await sleep(200);
+		} catch (e) {
+			console.error("buildSpaceCenter4: placement failed for", item.type, e);
 		}
 
 		results.push(summaryEntry);
@@ -2441,20 +2238,14 @@ export async function dysonBuildPlan3(): Promise<{
 	});
 
 	for (const spec of validPlan) {
-		for (let i = 0; i < spec.count; i++) {
-			let res: { results: Array<{ type: Building; requested: number; placed: number }>; skippedWonders: number; skippedMines: number } | undefined;
-			try {
-				res = buildBuildingsInRange(minX, maxX, startY, endY, [ { type: spec.type, count: 1, targetLevel: 10 } ]);
-			} catch (e) {
-				console.error("dysonBuildPlan3: placement failed for", spec.type, e);
-				break;
-			}
-			const placed = res.results.length > 0 ? res.results[0].placed : 0;
+		// Use doBuildingPlan to place the full requested count sequentially into the rightmost 10-tile band.
+		try {
+			const dp = await doBuildingPlan("right", 10, [{ type: spec.type, count: spec.count, level: 10 }], startY, 200);
+			const placed = dp.results.length > 0 ? dp.results[0].placed : 0;
 			const entry = summaryMap.get(spec.type);
 			if (entry) entry.placed += placed;
-			if (placed === 0) break;
-			// small delay so the UI shows incremental progress
-			await sleep(200);
+		} catch (e) {
+			console.error("dysonBuildPlan3: placement failed for", spec.type, e);
 		}
 	}
 
@@ -2632,20 +2423,17 @@ export async function aldersonDisc2(): Promise<{
 		const sortedPlan = [...validPlan].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
 
 		for (const spec of sortedPlan) {
-		for (let i = 0; i < spec.count; i++) {
+			// Place the whole requested count sequentially into the rightmost 10-tile band
 			try {
-				const res = buildBuildingsInRange(minX, maxX, startY, endY, [ { type: spec.type, count: 1, targetLevel: 10 } ]);
-				const placed = res.results.length > 0 ? res.results[0].placed : 0;
+				const dp = await doBuildingPlan("right", 10, [{ type: spec.type, count: spec.count, level: 10 }], startY, 200);
+				const placed = dp.results.length > 0 ? dp.results[0].placed : 0;
 				const entry = summaryMap.get(spec.type);
 				if (entry) entry.placed += placed;
-				if (placed === 0) break; // no more space for this type
-				await sleep(200);
 			} catch (e) {
 				console.error("aldersonDisc2: placement failed for", spec.type, e);
-				break;
 			}
+
 		}
-	}
 
 	const results = Array.from(summaryMap.values());
 	try {
@@ -2780,18 +2568,14 @@ export async function aldersonDisc3(): Promise<{
 	const sortedPlan = [...validPlan].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
 
 	for (const spec of sortedPlan) {
-		for (let i = 0; i < spec.count; i++) {
-			try {
-				const res = buildBuildingsInRange(minX, maxX, startY, endY, [{ type: spec.type, count: 1, targetLevel: 10 }]);
-				const placed = res.results.length > 0 ? res.results[0].placed : 0;
-				const entry = summaryMap.get(spec.type);
-				if (entry) entry.placed += placed;
-				if (placed === 0) break;
-				await sleep(200);
-			} catch (e) {
-				console.error("aldersonDisc3: placement failed for", spec.type, e);
-				break;
-			}
+		// Place the entire requested count sequentially into the rightmost 10-tile band
+		try {
+			const dp = await doBuildingPlan("right", 10, [{ type: spec.type, count: spec.count, level: 10 }], startY, 200);
+			const placed = dp.results.length > 0 ? dp.results[0].placed : 0;
+			const entry = summaryMap.get(spec.type);
+			if (entry) entry.placed += placed;
+		} catch (e) {
+			console.error("aldersonDisc3: placement failed for", spec.type, e);
 		}
 	}
 

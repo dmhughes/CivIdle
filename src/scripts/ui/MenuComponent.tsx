@@ -564,13 +564,13 @@ export function MenuComponent(): React.ReactNode {
                         try {
                            const mod = await import("../logic/davescripts");
                            if (mod && typeof mod.prepareCnTowerMaterials === "function") {
-                              const res = mod.prepareCnTowerMaterials();
+                              const res = await mod.prepareCnTowerMaterials();
                               const opts = getGameOptions();
                               opts.daveScriptsRun = opts.daveScriptsRun ?? {};
                               opts.daveScriptsRun.PrepareCnTowerMaterial = opts.rebirthInfo?.length ?? 0;
                               notifyGameOptionsUpdate(opts);
-                              const top = res.nonElectPlacement ? res.nonElectPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
-                              const bottom = res.electPlacement ? res.electPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              const top = res.nonElectPlacement ? res.nonElectPlacement.results.map((r: { type: string; requested: number; placed: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              const bottom = res.electPlacement ? res.electPlacement.results.map((r: { type: string; requested: number; placed: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
                               showToast(`PrepareCN: cleared ${res.cleared?.cleared ?? 0}; non-elect: ${top}; elect: ${bottom}`);
                            } else {
                               showToast("Dave's scripts are not available in this build.");
@@ -591,13 +591,13 @@ export function MenuComponent(): React.ReactNode {
                         try {
                            const mod = await import("../logic/davescripts");
                            if (mod && typeof mod.prepareAtomiumAndOxUni === "function") {
-                              const res = mod.prepareAtomiumAndOxUni();
+                              const res = await mod.prepareAtomiumAndOxUni();
                               const opts = getGameOptions();
                               opts.daveScriptsRun = opts.daveScriptsRun ?? {};
                               opts.daveScriptsRun.PrepareAtomiumAndOxUni = opts.rebirthInfo?.length ?? 0;
                               notifyGameOptionsUpdate(opts);
-                              const non = res.nonElectPlacement ? res.nonElectPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
-                              const elect = res.electPlacement ? res.electPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              const non = res.nonElectPlacement ? res.nonElectPlacement.results.map((r: { type: string; requested: number; placed: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                              const elect = res.electPlacement ? res.electPlacement.results.map((r: { type: string; requested: number; placed: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
                               showToast(`PrepareAtomiumAndOxUni: clearedTop ${res.clearedTop?.cleared ?? 0}; clearedBottom ${res.clearedBottom?.cleared ?? 0}; non-elect: ${non}; elect: ${elect}`);
                            } else {
                               showToast("Dave's scripts are not available in this build.");
@@ -618,13 +618,13 @@ export function MenuComponent(): React.ReactNode {
                           try {
                              const mod = await import("../logic/davescripts");
                              if (mod && typeof mod.prepareCloneLabs === "function") {
-                                const res = mod.prepareCloneLabs();
+                                const res = await mod.prepareCloneLabs();
                                 const opts = getGameOptions();
                                 opts.daveScriptsRun = opts.daveScriptsRun ?? {};
                                 opts.daveScriptsRun.PrepareCloneLabs = opts.rebirthInfo?.length ?? 0;
                                 notifyGameOptionsUpdate(opts);
-                                const non = res.nonElectPlacement ? res.nonElectPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
-                                const elect = res.electPlacement ? res.electPlacement.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                                const non = res.nonElectPlacement ? res.nonElectPlacement.results.map((r: { type: string; requested: number; placed: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
+                                const elect = res.electPlacement ? res.electPlacement.results.map((r: { type: string; requested: number; placed: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ") : "none";
                                 showToast(`PrepareCloneLabs: clearedTop ${res.clearedTop?.cleared ?? 0}; clearedBottom ${res.clearedBottom?.cleared ?? 0}; non-elect: ${non}; elect: ${elect}`);
                              } else {
                                 showToast("Dave's scripts are not available in this build.");

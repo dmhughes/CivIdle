@@ -448,17 +448,15 @@ export function MenuComponent(): React.ReactNode {
                         try {
                            const mod = await import("../logic/davescripts");
                            if (mod && typeof mod.buildApartments === "function") {
-                                 const res = await mod.buildApartments();
-                                 const matsOk = res.materials ? 'ok' : 'none';
-                                 const supportOk = res.support ? 'ok' : 'none';
-                                 const deploySummary = res.deploy ? `placed ${res.deploy.placed}/${res.deploy.requested}` : 'not run';
-                                 // mark as run for this rebirth
-                                 const opts = getGameOptions();
-                                 opts.daveScriptsRun = opts.daveScriptsRun ?? {};
-                                 opts.daveScriptsRun.BuildApartments = opts.rebirthInfo?.length ?? 0;
-                                 notifyGameOptionsUpdate(opts);
-                                 // Present a compact summary in the toast
-                                 showToast(`BuildApartments: Materials ${matsOk}, Support ${supportOk}, Deploy ${deploySummary}`);
+                              const res = await mod.buildApartments();
+                              // mark as run for this rebirth
+                              const opts = getGameOptions();
+                              opts.daveScriptsRun = opts.daveScriptsRun ?? {};
+                              opts.daveScriptsRun.BuildApartments = opts.rebirthInfo?.length ?? 0;
+                              notifyGameOptionsUpdate(opts);
+                              // Present the single-string summary returned by buildApartments
+                              const summary = res?.message ?? 'no summary';
+                              showToast(`BuildApartments: ${summary}`);
                            } else {
                               showToast("Dave's scripts are not available in this build.");
                            }

@@ -373,62 +373,6 @@ export function buildInitialMines(): {
 	};
 }
 
-
-/**
- * 002 - Build Apartment Materials
- *
- * Build in a band of 10 tiles on the extreme right-hand side of the map.
- * In row 1 (index 0) place:
- *  - 5 x Brickworks (target level 15)
- *  - 5 x LumberMill (target level 15)
- *
- * Uses buildBuildingsInRange to perform the placements and returns a small
- * summary object with per-type requested/placed counts.
- */
-export function buildApartmentMaterials(): {
-	brickworksResult: { requested: number; placed: number } | null;
-	lumberMillResult: { requested: number; placed: number } | null;
-	message?: string;
-} {
-	const gs = getGameState();
-
-	// Determine map bounds (same approach used elsewhere)
-	let mapMaxX = Number.NEGATIVE_INFINITY;
-	for (const xy of gs.tiles.keys()) {
-		const p = tileToPoint(xy);
-		if (p.x > mapMaxX) mapMaxX = p.x;
-	}
-
-	if (mapMaxX === Number.NEGATIVE_INFINITY) {
-		return { brickworksResult: null, lumberMillResult: null, message: "No map tiles available" };
-	}
-
-	const maxX = Math.floor(mapMaxX);
-	const minX = Math.max(0, maxX - 9); // extreme-right 10-tile band
-	const minY = 0;
-	const maxY = 0; // row index 0
-
-	const specs = [
-		{ type: "Brickworks" as Building, count: 5, targetLevel: 15 },
-		{ type: "LumberMill" as Building, count: 5, targetLevel: 15 },
-	];
-
-	const placement = buildBuildingsInRange(minX, maxX, minY, maxY, specs);
-
-	const findResult = (t: Building) => {
-		const r = placement.results.find((x) => x.type === t);
-		return r ? { requested: r.requested, placed: r.placed } : null;
-	};
-
-	const brickworksResult = findResult("Brickworks" as Building);
-	const lumberMillResult = findResult("LumberMill" as Building);
-
-	ensureVisualRefresh();
-
-	return { brickworksResult, lumberMillResult };
-}
-
-
 /**
  * 003 - Build Big Ben Materials
  *
@@ -506,27 +450,48 @@ export function buildBigBenMaterials(): {
 	return { results: placement.results };
 }
 
-
-/**
- * High-level: Build Apartments
- * Calls materials then support routines in sequence and returns a combined summary.
- */
 export async function buildApartments(): Promise<{
-	materials?: ReturnType<typeof buildApartmentMaterials> | null;
-	support?: ReturnType<typeof buildApartmentSupport> | null;
-	deploy?: Awaited<ReturnType<typeof deployApartments>> | null;
 	message?: string;
 }> {
 	try {
-		const materials = buildApartmentMaterials();
-		const support = buildApartmentSupport();
-		// After support buildings are placed, deploy apartments in bulk
-		const deploy = await deployApartments();
-		return { materials, support, deploy };
+
+		const buildings1 = [
+			{ type: "Brickworks" as Building, count: 5, targetLevel: 15 },
+			{ type: "LumberMill" as Building, count: 5, targetLevel: 15 },
+		];
+
+		const buildings2 = [
+			{ type: "Bakery" as Building, count: 15, targetLevel: 15 },
+			{ type: "PoultryFarm" as Building, count: 15, targetLevel: 15 },
+			{ type: "CheeseMaker" as Building, count: 12, targetLevel: 15 },
+			{ type: "FlourMill" as Building, count: 2, targetLevel: 15 },
+			{ type: "DairyFarm" as Building, count: 2, targetLevel: 15 }
+		];
+
+		const buildings3 = [
+			{ type: "Apartment" as Building, count: 750, targetLevel: 10 },
+		];
+
+	const build1Result = await doBuildingPlan("right", 10, buildings1, 0, 200);
+	const build2Result = await doBuildingPlan("right", 10, buildings2, 2, 200);
+	const build3Result = await doBuildingPlan("left", 25, buildings3, 0, 200);
+
+		// Format a single summary string combining the three sub-results.
+		const fmt = (r: { results?: Array<{ type: Building; requested: number; placed: number }>; message?: string } | undefined) => {
+			if (!r) return "none";
+			if (r.message) return r.message;
+			if (!r.results || r.results.length === 0) return "none";
+			return r.results.map((x) => `${x.type} ${x.placed}/${x.requested}`).join(", ");
+		};
+
+		const summary = `materials: ${fmt(build1Result)}; support: ${fmt(build2Result)}; deploy: ${fmt(build3Result)}`;
+		return { message: summary };
 	} catch (e) {
-		return { materials: null, support: null, deploy: null, message: String(e) };
+		return { message: String(e) };
 	}
 }
+
+
 
 
 /**
@@ -620,209 +585,6 @@ export function prepareCondoMaterials(): {
 
 	return { topPlacement: { results: topPlacement.results }, cleared, bottomPlacement: { results: bottomPlacement.results } };
 }
-
-
-/**
- * Build apartment support buildings in the same right-hand 10-tile band.
- * Starts at row 7 (index = 6) and covers 4 rows (y = 6..9).
- * Places:
- *  - 15 x Bakery (targetLevel 15)
- *  - 15 x PoultryFarm (targetLevel 15)
- *  - 12 x CheeseMaker (targetLevel 15)
- *  - 2 x FlourMill (targetLevel 15)
- *  - 2 x DairyFarm (targetLevel 15)
- */
-export function buildApartmentSupport(): {
-	bakery: { requested: number; placed: number } | null;
-	poultryFarm: { requested: number; placed: number } | null;
-	cheeseMaker: { requested: number; placed: number } | null;
-	flourMill: { requested: number; placed: number } | null;
-	dairyFarm: { requested: number; placed: number } | null;
-	message?: string;
-} {
-	const gs = getGameState();
-
-	// Determine map bounds
-	let mapMaxX = Number.NEGATIVE_INFINITY;
-	let mapMaxY = Number.NEGATIVE_INFINITY;
-	for (const xy of gs.tiles.keys()) {
-		const p = tileToPoint(xy);
-		if (p.x > mapMaxX) mapMaxX = p.x;
-		if (p.y > mapMaxY) mapMaxY = p.y;
-	}
-
-	if (mapMaxX === Number.NEGATIVE_INFINITY) {
-		return { bakery: null, poultryFarm: null, cheeseMaker: null, flourMill: null, dairyFarm: null, message: "No map tiles available" };
-	}
-
-	const maxX = Math.floor(mapMaxX);
-	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
-
-	const minY = 6;
-	let maxY = minY + 3; // 4 rows
-	if (mapMaxY !== Number.NEGATIVE_INFINITY) {
-		maxY = Math.min(maxY, Math.floor(mapMaxY));
-	}
-
-	const specs = [
-		{ type: "Bakery" as Building, count: 15, targetLevel: 15 },
-		{ type: "PoultryFarm" as Building, count: 15, targetLevel: 15 },
-		{ type: "CheeseMaker" as Building, count: 12, targetLevel: 15 },
-		{ type: "FlourMill" as Building, count: 2, targetLevel: 15 },
-		{ type: "DairyFarm" as Building, count: 2, targetLevel: 15 }
-	];
-
-	const placement = buildBuildingsInRange(minX, maxX, minY, maxY, specs);
-
-	const find = (t: Building) => {
-		const r = placement.results.find((x) => x.type === t);
-		return r ? { requested: r.requested, placed: r.placed } : null;
-	};
-
-	const bakery = find("Bakery" as Building);
-	const poultryFarm = find("PoultryFarm" as Building);
-	const cheeseMaker = find("CheeseMaker" as Building);
-	const flourMill = find("FlourMill" as Building);
-	const dairyFarm = find("DairyFarm" as Building);
-
-	ensureVisualRefresh();
-
-	return { bakery, poultryFarm, cheeseMaker, flourMill, dairyFarm };
-}
-
-
-/**
- * Deploy Apartments in bulk.
- *
- * - Builds `total` apartments (750) in the rightmost 20-tile strip starting
- *   at the top of the map (y=0). It places them in chunks of `chunkSize`
- *   (100) using `buildBuildingsInRange` and waits for each chunk to finish
- *   construction before starting the next chunk.
- *
- * Returns a summary with totals and per-chunk placements.
- */
-export async function deployApartments(): Promise<{
-	requested: number;
-	placed: number;
-	remaining: number;
-	chunks: number[];
-	message?: string;
-}> {
-	const TOTAL = 750;
-	const CHUNK = 100;
-	const gs = getGameState();
-
-	// Find map bounds (we need minX for the left-hand edge)
-	let mapMaxX = Number.NEGATIVE_INFINITY;
-	let mapMinX = Number.POSITIVE_INFINITY;
-	let mapMaxY = Number.NEGATIVE_INFINITY;
-	for (const xy of gs.tiles.keys()) {
-		const p = tileToPoint(xy);
-		if (p.x > mapMaxX) mapMaxX = p.x;
-		if (p.x < mapMinX) mapMinX = p.x;
-		if (p.y > mapMaxY) mapMaxY = p.y;
-	}
-	if (mapMaxX === Number.NEGATIVE_INFINITY || mapMinX === Number.POSITIVE_INFINITY) {
-		return { requested: TOTAL, placed: 0, remaining: TOTAL, chunks: [], message: "No map tiles available" };
-	}
-
-	// LEFT-hand 20-tile-wide strip
-	const minX = Math.max(0, Math.floor(mapMinX));
-	const maxX = Math.min(Math.floor(mapMaxX), minX + 19);
-	const minY = 0;
-	const maxY = Math.floor(mapMaxY);
-
-	// Ensure a CoalPowerPlant exists in the left-hand strip so CloneLabs
-	// will be able to be powered. We will not overwrite existing buildings
-	// or wonders — only place on the first empty tile scanning top->bottom,
-	// left->right. If a CoalPowerPlant already exists in the strip, do nothing.
-	let coalExists = false;
-	for (const [xy, td] of gs.tiles.entries()) {
-		if (!td || !td.building) continue;
-		const p = tileToPoint(xy);
-		if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
-		if (td.building.type === ("CoalPowerPlant" as Building)) { coalExists = true; break; }
-	}
-	if (!coalExists) {
-		let placedCoal = false;
-		for (let y = minY; y <= maxY && !placedCoal; y++) {
-			for (let x = minX; x <= maxX && !placedCoal; x++) {
-				const xy = pointToTile({ x, y });
-				const td = gs.tiles.get(xy);
-				if (!td) continue;
-				// Only place on empty tiles; do not overwrite wonders/mines/other buildings
-				if (!td.building) {
-					const b = makeBuilding({ type: "CoalPowerPlant" as Building, level: 0, desiredLevel: 15 });
-					td.building = b;
-					placedCoal = true;
-				}
-			}
-		}
-		if (placedCoal) {
-			clearTransportSourceCache();
-			ensureVisualRefresh();
-		}
-	}
-
-	let remaining = TOTAL;
-	let totalPlaced = 0;
-	const chunks: number[] = [];
-
-	// Helper to count completed apartments in the strip
-	const countCompleted = (): number => {
-		const s = getGameState();
-		let c = 0;
-		for (const [xy, td] of s.tiles.entries()) {
-			if (!td || !td.building) continue;
-			const p = tileToPoint(xy);
-			if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
-			if (td.building.type === ("Apartment" as Building) && td.building.status === "completed") c++;
-		}
-		return c;
-	};
-
-	// Simple sleep
-	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-	while (remaining > 0) {
-		const chunkSize = Math.min(CHUNK, remaining);
-
-		const res = buildBuildingsInRange(minX, maxX, minY, maxY, [
-			{ type: "Apartment" as Building, count: chunkSize, targetLevel: 10 },
-		]);
-
-		const placed = res.results.length > 0 ? res.results[0].placed : 0;
-		chunks.push(placed);
-		totalPlaced += placed;
-		remaining -= placed;
-
-		if (placed === 0) {
-			// nothing could be placed (no empty tiles) — abort to avoid infinite loop
-			break;
-		}
-
-		// Wait until the newly placed buildings in this chunk are completed.
-		const completedBefore = countCompleted();
-		const need = placed;
-		const MAX_WAIT_MS = 5 * 60 * 1000; // 5 minutes max per chunk
-		const POLL_MS = 1000;
-		let waited = 0;
-		while (true) {
-			await sleep(POLL_MS);
-			waited += POLL_MS;
-			const completedAfter = countCompleted();
-			if (completedAfter - completedBefore >= need) break;
-			if (waited >= MAX_WAIT_MS) {
-				// give up waiting for this chunk and continue with next (or abort)
-				break;
-			}
-		}
-	}
-
-	ensureVisualRefresh();
-	return { requested: TOTAL, placed: totalPlaced, remaining, chunks };
-}
-
 
 /**
  * Replace all Apartments with Condos.
@@ -2370,27 +2132,7 @@ export async function buildSpaceCenter2(): Promise<{
 	placement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
 	message?: string;
 }> {
-	const gs = getGameState();
 
-	// Determine map bounds
-	let mapMaxX = Number.NEGATIVE_INFINITY;
-	let mapMaxY = Number.NEGATIVE_INFINITY;
-	for (const xy of gs.tiles.keys()) {
-		const p = tileToPoint(xy);
-		if (p.x > mapMaxX) mapMaxX = p.x;
-		if (p.y > mapMaxY) mapMaxY = p.y;
-	}
-	if (mapMaxX === Number.NEGATIVE_INFINITY) {
-		return { placement: null, message: "No map tiles available" };
-	}
-
-	const maxX = Math.floor(mapMaxX);
-	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
-
-	const startY = 8; // row 9 -> index 8
-	const endY = Math.floor(mapMaxY);
-
-	// Non-electrified building plan (using the 4th-argument quantities from the supplied list; duplicates aggregated)
 	const plan: Array<{ type: Building; count: number }> = [
 		{ type: "MagazinePublisher" as Building, count: 8 },
 		{ type: "Stadium" as Building, count: 5 },
@@ -2424,45 +2166,21 @@ export async function buildSpaceCenter2(): Promise<{
 		{ type: "Brewery" as Building, count: 1 },
 	];
 
-	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+	const res = await doBuildingPlan("right", 10, plan, 8, 200);
 
-	// summary map
-	const summaryMap = new Map<string, { type: Building; requested: number; placed: number }>();
-	for (const p of plan) summaryMap.set(p.type, { type: p.type, requested: p.count, placed: 0 });
-
-	// Filter unknown building types and sort by tier ascending
-	const validPlan = plan.filter((p) => {
-		try { return !!Config.Building[p.type]; } catch (e) { return false; }
-	});
-	const sortedPlan = [...validPlan].sort((a, b) => (Config.BuildingTier[a.type] ?? 0) - (Config.BuildingTier[b.type] ?? 0));
-
-	for (const spec of sortedPlan) {
-		for (let i = 0; i < spec.count; i++) {
-			try {
-				const res = buildBuildingsInRange(minX, maxX, startY, endY, [{ type: spec.type, count: 1, targetLevel: 10 }]);
-				const placed = res.results.length > 0 ? res.results[0].placed : 0;
-				const entry = summaryMap.get(spec.type);
-				if (entry) entry.placed += placed;
-				if (placed === 0) break; // no more space for this type
-				await sleep(200);
-			} catch (e) {
-				console.error("buildSpaceCenter2: placement failed for", spec.type, e);
-				break;
-			}
-		}
+	// Map doBuildingPlan result -> original shape
+	if (res.message === "No map tiles available") {
+	return { placement: null, message: res.message };
 	}
-
-	const results = Array.from(summaryMap.values());
-	try { ensureVisualRefresh(); } catch (e) { console.error("ensureVisualRefresh failed in buildSpaceCenter2:", e); }
 	try {
-		const summary = results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
-		showToast(`Build Space Center 2 complete: ${summary}`);
+	const summary = res.results.map((r) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+	showToast(`Build Space Center 2 complete: ${summary}`);
 	} catch (e) {
-		console.error("showToast failed in buildSpaceCenter2:", e);
+	console.error("showToast failed in buildSpaceCenter2_v2:", e);
 	}
-
-	return { placement: { results } };
+	return { placement: { results: res.results }, message: res.message };
 }
+
 
 export async function buildSpaceCenter3(): Promise<{
 	placement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
@@ -3174,11 +2892,11 @@ export async function aldersonDisc3(): Promise<{
  * Returns an array of per-type summaries: requested and placed counts.
  */
 export async function doBuildingPlan(
-	side: "left" | "right",
-	width: number,
-	plan: Array<{ type: Building; count: number; level?: number }>,
-	startRow: number,
-	intervalMs: number,
+    side: "left" | "right",
+    width: number,
+    plan: Array<{ type: Building; count: number; level?: number }>,
+    startRow: number,
+    intervalMs: number,
 ): Promise<{ results: Array<{ type: Building; requested: number; placed: number }>; message?: string }> {
 	const gs = getGameState();
 
@@ -3319,7 +3037,9 @@ export async function doBuildingPlan(
 			placed++;
 			anyPlaced = true;
 
-			// Pause between placements so UI shows incremental progress
+			// Wait the configured interval between placements so the UI can
+			// show incremental progress. We avoid trying to force an extra
+			// visual refresh here; callers should rely on `intervalMs`.
 			if (intervalMs > 0) await sleep(intervalMs);
 		}
 

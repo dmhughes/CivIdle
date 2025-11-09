@@ -551,23 +551,6 @@ export async function prepareCondoMaterials(): Promise<{
 	bottomPlacement: { results: Array<{ type: Building; requested: number; placed: number; }>; } | null;
 	message?: string;
 }> {
-	const gs = getGameState();
-
-	// Determine map bounds
-	let mapMaxX = Number.NEGATIVE_INFINITY;
-	let mapMaxY = Number.NEGATIVE_INFINITY;
-	for (const xy of gs.tiles.keys()) {
-		const p = tileToPoint(xy);
-		if (p.x > mapMaxX) mapMaxX = p.x;
-		if (p.y > mapMaxY) mapMaxY = p.y;
-	}
-
-	if (mapMaxX === Number.NEGATIVE_INFINITY) {
-		return { topPlacement: null, cleared: null, bottomPlacement: null, message: "No map tiles available" };
-	}
-
-	const maxX = Math.floor(mapMaxX);
-	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
 
 	const topSpecs = [
 		{ type: "Sandpit" as Building, count: 1, targetLevel: 15 },
@@ -581,9 +564,7 @@ export async function prepareCondoMaterials(): Promise<{
 	const topPlacement = await doBuildingPlan("right", 10, topSpecs, 2, 200);
 
 	// Phase 2: clear lower band starting at row index 14 for 15 rows
-	const clearStartY = 14;
-	const clearEndY = Math.min(Math.floor(mapMaxY), clearStartY + 14); // total 15 rows
-	const cleared = clearRange(minX, maxX, clearStartY, clearEndY);
+	const cleared = clearRange("right", 10, 14, 28);
 
 	// Phase 3: build bottom materials starting at row index 14
 
@@ -597,8 +578,7 @@ export async function prepareCondoMaterials(): Promise<{
 
 	const bottomPlacement =  await doBuildingPlan("right", 10, bottomSpecs, 14, 200);
 
-	// Place coal mines needed for bottom materials — use the helper so we only
-	// place mines on valid deposit tiles and never overwrite existing mines.
+	// Place coal mines needed for bottom materials — use the helper so we only place mines on valid deposit tiles and never overwrite existing mines.
 	const coalPlaced = buildMines("CoalMine" as Building, 15, 2);
 
 	ensureVisualRefresh();

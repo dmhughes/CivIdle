@@ -476,7 +476,7 @@ export function MenuComponent(): React.ReactNode {
                         try {
                            const mod = await import("../logic/davescripts");
                            if (mod && typeof mod.buildBigBenMaterials === "function") {
-                              const res = mod.buildBigBenMaterials();
+                              const res = await mod.buildBigBenMaterials();
                               if (!res.results) {
                                  showToast(`BuildBigBenMaterials: ${res.message ?? 'no tiles placed'}`);
                                  return;
@@ -507,7 +507,7 @@ export function MenuComponent(): React.ReactNode {
                         try {
                            const mod = await import("../logic/davescripts");
                            if (mod && typeof mod.prepareCondoMaterials === "function") {
-                              const res = mod.prepareCondoMaterials();
+                              const res = await mod.prepareCondoMaterials();
                               // mark as run for this rebirth
                               const opts = getGameOptions();
                               opts.daveScriptsRun = opts.daveScriptsRun ?? {};

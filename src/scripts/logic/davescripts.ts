@@ -50,13 +50,61 @@ function ensureVisualRefresh(): void {
  * Returns an object describing how many tiles were cleared and how many
  * were preserved due to wonders or deposits.
  */
-export function clearRange(
-	minX: number,
-	maxX: number,
-	minY: number,
-	maxY: number,
-): { cleared: number; preservedWonders: number; preservedMines: number } {
+// Overload: keep existing numeric signature and add a strip-based signature
+export function clearRange(minX: number, maxX: number, minY: number, maxY: number): { cleared: number; preservedWonders: number; preservedMines: number };
+export function clearRange(side: "left" | "right", width: number, startRow: number, endRow: number): { cleared: number; preservedWonders: number; preservedMines: number };
+export function clearRange(a: number | "left" | "right", b: number, c: number, d: number) {
 	const gs = getGameState();
+
+	// Resolve arguments: support both clearRange(minX,maxX,minY,maxY) and
+	// clearRange(side,width,startRow,endRow).
+	let minX: number;
+	let maxX: number;
+	let minY: number;
+	let maxY: number;
+
+	if (a === "left" || a === "right") {
+		// Strip-based signature
+		const side = a as "left" | "right";
+		const width = b;
+		const startRow = c;
+		const endRow = d;
+
+		// Determine map bounds
+		let mapMaxX = Number.NEGATIVE_INFINITY;
+		let mapMinX = Number.POSITIVE_INFINITY;
+		let mapMaxY = Number.NEGATIVE_INFINITY;
+		for (const xy of gs.tiles.keys()) {
+			const p = tileToPoint(xy);
+			if (p.x > mapMaxX) mapMaxX = p.x;
+			if (p.x < mapMinX) mapMinX = p.x;
+			if (p.y > mapMaxY) mapMaxY = p.y;
+		}
+		if (mapMaxX === Number.NEGATIVE_INFINITY || mapMinX === Number.POSITIVE_INFINITY) {
+			return { cleared: 0, preservedWonders: 0, preservedMines: 0 };
+		}
+
+		const floorMaxX = Math.floor(mapMaxX);
+		const floorMinX = Math.max(0, Math.floor(mapMinX));
+		const floorMaxY = Math.floor(mapMaxY);
+
+		if (side === "right") {
+			maxX = floorMaxX;
+			minX = Math.max(0, maxX - Math.max(0, width - 1));
+		} else {
+			minX = floorMinX;
+			maxX = Math.min(floorMaxX, minX + Math.max(0, width - 1));
+		}
+
+		minY = Math.max(0, Math.floor(startRow));
+		maxY = Math.min(floorMaxY, Math.floor(endRow));
+	} else {
+		// Numeric signature
+		minX = a as number;
+		maxX = b;
+		minY = c;
+		maxY = d;
+	}
 
 	let clearedTotal = 0;
 	// use sets to avoid double-counting preserved tiles across passes
@@ -382,36 +430,13 @@ export function buildInitialMines(): {
  * requested at target level 15 and the function returns the per-type
  * requested/placed counts.
  */
-export function buildBigBenMaterials(): {
+export async function buildBigBenMaterials(): Promise<{
 	results: Array<{ type: Building; requested: number; placed: number }> | null;
 	message?: string;
-} {
-	const gs = getGameState();
-
-	// Determine map bounds
-	let mapMaxX = Number.NEGATIVE_INFINITY;
-	let mapMaxY = Number.NEGATIVE_INFINITY;
-	for (const xy of gs.tiles.keys()) {
-		const p = tileToPoint(xy);
-		if (p.x > mapMaxX) mapMaxX = p.x;
-		if (p.y > mapMaxY) mapMaxY = p.y;
-	}
-
-	if (mapMaxX === Number.NEGATIVE_INFINITY) {
-		return { results: null, message: "No map tiles available" };
-	}
-
-	const maxX = Math.floor(mapMaxX);
-	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
-
-	// Row index 14 (clamped to map height). Use a strip starting at y=14 and
-	// extend to the bottom of the map (mapMaxY) so materials fill the band as
-	// far down as needed.
-	const startY = Math.min(Math.floor(mapMaxY), 14);
-	const endY = Math.floor(mapMaxY);
+}> {
 
 	// Base list provided by the user (these will be multiplied by 4)
-	const baseSpecs: Array<{ type: Building; count: number }> = [
+	const bigBenMaterials: Array<{ type: Building; count: number }> = [
 		{ type: "CottonPlantation" as Building, count: 1 },
 		{ type: "CottonMill" as Building, count: 2 },
 		{ type: "IronForge" as Building, count: 6 },
@@ -433,8 +458,7 @@ export function buildBigBenMaterials(): {
 		{ type: "Parliament" as Building, count: 4 },
 	];
 
-	// Multiply counts by 4 as requested and set targetLevel = 15
-	const specs = baseSpecs.map((b) => ({ type: b.type, count: b.count * 4, targetLevel: 15 }));
+	const result = await doBuildingPlan("right", 10, bigBenMaterials.map((b) => ({ type: b.type, count: b.count * 4, targetLevel: 15 })), 14, 200);
 
 	// First, attempt to place mines required for materials: 2 x Copper, 2 x Iron.
 	// Use buildMines helper which respects deposits and never overwrites existing mines.
@@ -442,12 +466,14 @@ export function buildBigBenMaterials(): {
 	buildMines("CopperMiningCamp" as Building, 15, 2);
 	buildMines("IronMiningCamp" as Building, 15, 2);
 
-	const placement = buildBuildingsInRange(minX, maxX, startY, endY, specs);
 
 	// Immediate refresh after placement so UI shows newly placed buildings
 	ensureVisualRefresh();
 
-	return { results: placement.results };
+	if (!result || !result.results || result.results.length === 0) {
+		return { results: null, message: result?.message };
+	}
+	return { results: result.results, message: result.message };
 }
 
 export async function buildApartments(): Promise<{
@@ -519,12 +545,12 @@ export async function buildApartments(): Promise<{
  * Returns a summary containing placement results for both phases and the
  * number of tiles cleared.
  */
-export function prepareCondoMaterials(): {
-	topPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
-	cleared: { cleared: number; preservedWonders: number; preservedMines: number } | null;
-	bottomPlacement: { results: Array<{ type: Building; requested: number; placed: number }> } | null;
+export async function prepareCondoMaterials(): Promise<{
+	topPlacement: { results: Array<{ type: Building; requested: number; placed: number; }>; } | null;
+	cleared: { cleared: number; preservedWonders: number; preservedMines: number; } | null;
+	bottomPlacement: { results: Array<{ type: Building; requested: number; placed: number; }>; } | null;
 	message?: string;
-} {
+}> {
 	const gs = getGameState();
 
 	// Determine map bounds
@@ -543,10 +569,6 @@ export function prepareCondoMaterials(): {
 	const maxX = Math.floor(mapMaxX);
 	const minX = Math.max(0, maxX - 9); // rightmost 10-tile band
 
-	// Phase 1: top materials at row index 2 (row 3)
-	const topMinY = 2;
-	const topMaxY = Math.min(Math.floor(mapMaxY), topMinY + 3); // cover 4 rows starting at index 2
-
 	const topSpecs = [
 		{ type: "Sandpit" as Building, count: 1, targetLevel: 15 },
 		{ type: "SteelMill" as Building, count: 4, targetLevel: 15 },
@@ -556,7 +578,7 @@ export function prepareCondoMaterials(): {
 		{ type: "IronForge" as Building, count: 5, targetLevel: 15 },
 	];
 
-	const topPlacement = buildBuildingsInRange(minX, maxX, topMinY, topMaxY, topSpecs);
+	const topPlacement = await doBuildingPlan("right", 10, topSpecs, 2, 200);
 
 	// Phase 2: clear lower band starting at row index 14 for 15 rows
 	const clearStartY = 14;
@@ -564,8 +586,6 @@ export function prepareCondoMaterials(): {
 	const cleared = clearRange(minX, maxX, clearStartY, clearEndY);
 
 	// Phase 3: build bottom materials starting at row index 14
-	const bottomMinY = clearStartY;
-	const bottomMaxY = clearEndY;
 
 	const bottomSpecs = [
 		{ type: "Pizzeria" as Building, count: 50, targetLevel: 15 },
@@ -575,7 +595,7 @@ export function prepareCondoMaterials(): {
 		{ type: "DairyFarm" as Building, count: 1, targetLevel: 15 },
 	];
 
-	const bottomPlacement = buildBuildingsInRange(minX, maxX, bottomMinY, bottomMaxY, bottomSpecs);
+	const bottomPlacement =  await doBuildingPlan("right", 10, bottomSpecs, 14, 200);
 
 	// Place coal mines needed for bottom materials — use the helper so we only
 	// place mines on valid deposit tiles and never overwrite existing mines.
@@ -583,7 +603,7 @@ export function prepareCondoMaterials(): {
 
 	ensureVisualRefresh();
 
-	return { topPlacement: { results: topPlacement.results }, cleared, bottomPlacement: { results: bottomPlacement.results } };
+	return { topPlacement: { results: topPlacement.results }, cleared, bottomPlacement: { results: (bottomPlacement).results } };
 }
 
 /**

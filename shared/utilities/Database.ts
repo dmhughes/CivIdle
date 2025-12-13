@@ -2,6 +2,7 @@ import type { Building } from "../definitions/BuildingDefinitions";
 import type { City } from "../definitions/CityDefinitions";
 import type { Material } from "../definitions/MaterialDefinitions";
 import type { TechAge } from "../definitions/TechDefinitions";
+import type { GameOptionServer } from "../logic/GameState";
 import type { IHeartbeatData } from "../logic/GameStateLogic";
 import { HOUR } from "./Helper";
 import { L, t } from "./i18n";
@@ -157,10 +158,13 @@ export enum UserAttributes {
    Banned = 1 << 6,
    TribuneOnly = 1 << 7,
    DisableRename = 1 << 8,
-   __Unused = 1 << 9,
+   SuspendTrade = 1 << 9,
    Suspicious = 1 << 10,
    Desynced = 1 << 11,
+   OverrideRankUp = 1 << 12,
 }
+
+export const UserAttributeKeys = Object.keys(UserAttributes).filter((key) => Number.isNaN(Number(key)));
 
 export enum UserColors {
    Default = 0,
@@ -241,6 +245,7 @@ export interface IUser {
    lastCheckInAt?: number;
    lastTradedAt: number;
    heartbeatData?: IHeartbeatData;
+   gameOptions?: GameOptionServer;
 }
 
 export interface IConnectionRequest {

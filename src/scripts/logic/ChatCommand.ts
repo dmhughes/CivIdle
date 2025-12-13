@@ -8,11 +8,14 @@ import {
 } from "../../../shared/logic/RebirthLogic";
 import {
    ChatChannels,
+   UserAttributeKeys,
    UserAttributes,
    type AccountLevel,
    type ChatChannel,
 } from "../../../shared/utilities/Database";
 import {
+   clamp,
+   clearFlag,
    firstKeyOf,
    formatHM,
    formatNumber,
@@ -22,6 +25,7 @@ import {
    numberToRoman,
    safeParseInt,
    SECOND,
+   setFlag,
    sizeOf,
    uuid4,
 } from "../../../shared/utilities/Helper";
@@ -104,7 +108,7 @@ export async function handleChatCommand(command: string): Promise<void> {
             getGameOptions().greatPeople = {};
             getGameOptions().greatPeopleChoicesV2 = rollPermanentGreatPeople(
                number,
-               Math.floor(number / sizeOf(Config.GreatPerson)),
+               clamp(Math.floor(number / sizeOf(Config.GreatPerson)), 1, Number.POSITIVE_INFINITY),
                DEFAULT_GREAT_PEOPLE_CHOICE_COUNT,
                MAX_TECH_AGE,
                getGameState().city,
@@ -278,37 +282,30 @@ export async function handleChatCommand(command: string): Promise<void> {
          }
          const attr = await client.getPlayerAttr(parts[1]);
          addSystemMessage(
-            [
-               `Flag=${attr.toString(2)}`,
-               `Mod=${hasFlag(attr, UserAttributes.Mod)}`,
-               `DLC1=${hasFlag(attr, UserAttributes.DLC1)}`,
-               `DLC2=${hasFlag(attr, UserAttributes.DLC2)}`,
-               `Banned=${hasFlag(attr, UserAttributes.Banned)}`,
-               `TribuneOnly=${hasFlag(attr, UserAttributes.TribuneOnly)}`,
-               `NoRename=${hasFlag(attr, UserAttributes.DisableRename)}`,
-               `Suspicious=${hasFlag(attr, UserAttributes.Suspicious)}`,
-               `Desynced=${hasFlag(attr, UserAttributes.Desynced)}`,
-            ].join(", "),
+            `${parts[1]}:\n${UserAttributeKeys.filter((key) =>
+               hasFlag(attr, UserAttributes[key as keyof typeof UserAttributes]),
+            ).join(", ")}`,
          );
          break;
       }
-      case "setplayerattr": {
+      case "toggleplayerattr": {
          if (!parts[1] || !parts[2]) {
             throw new Error("Invalid command format");
          }
-         const attr = await client.setPlayerAttr(parts[1], Number.parseInt(parts[2], 2));
+         const oldAttr = await client.getPlayerAttr(parts[1]);
+         const flag = UserAttributes[parts[2] as keyof typeof UserAttributes];
+         if (!flag) {
+            addSystemMessage(`Unknown attribute: ${parts[2]}`);
+            break;
+         }
+         const newAttr = hasFlag(oldAttr, flag) ? clearFlag(oldAttr, flag) : setFlag(oldAttr, flag);
+         const result = await client.setPlayerAttr(parts[1], newAttr);
          addSystemMessage(
-            [
-               `Flag=${attr.toString(2)}`,
-               `Mod=${hasFlag(attr, UserAttributes.Mod)}`,
-               `DLC1=${hasFlag(attr, UserAttributes.DLC1)}`,
-               `DLC2=${hasFlag(attr, UserAttributes.DLC2)}`,
-               `Banned=${hasFlag(attr, UserAttributes.Banned)}`,
-               `TribuneOnly=${hasFlag(attr, UserAttributes.TribuneOnly)}`,
-               `NoRename=${hasFlag(attr, UserAttributes.DisableRename)}`,
-               `Suspicious=${hasFlag(attr, UserAttributes.Suspicious)}`,
-               `Desynced=${hasFlag(attr, UserAttributes.Desynced)}`,
-            ].join(", "),
+            `${parts[1]}:\nOld = ${UserAttributeKeys.filter((key) =>
+               hasFlag(oldAttr, UserAttributes[key as keyof typeof UserAttributes]),
+            ).join(", ")}\nNew = ${UserAttributeKeys.filter((key) =>
+               hasFlag(result, UserAttributes[key as keyof typeof UserAttributes]),
+            ).join(", ")}`,
          );
          break;
       }

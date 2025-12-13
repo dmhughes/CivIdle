@@ -69,7 +69,6 @@ export class GameState {
    clientOfflineSec = 0;
    watchedResources: Set<Material> = new Set();
    mapSize = ROME_CITY_SIZE;
-   nonce = Math.random();
 }
 
 export type GreatPeopleChoice = GreatPerson[];
@@ -302,12 +301,15 @@ export class GameOptions {
    warehouseQuickMode = true;
    migrationFlags = MigrationFlags.None;
    hideResourcePanelSections = new Set<ResourcePanelSection>();
+   useMirrorServer = false;
 }
+
+export type GameOptionServer = Pick<GameOptions, "ageWisdom" | "greatPeople">;
 
 export enum RankUpFlags {
    Unset = 0,
-   NotUpgraded = 1 << 0,
-   Upgraded = 1 << 1,
+   NotUpgraded = 1,
+   Upgraded = 2,
 }
 
 export enum MigrationFlags {

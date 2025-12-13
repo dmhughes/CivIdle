@@ -30,7 +30,7 @@ import {
    UserAttributes,
    type ChatChannel,
 } from "../../../shared/utilities/Database";
-import { vacuumChat } from "../../../shared/utilities/DatabaseShared";
+import { isSaveOwner, vacuumChat } from "../../../shared/utilities/DatabaseShared";
 import {
    SECOND,
    WEEK,
@@ -92,7 +92,7 @@ let chatMessages: LocalChat[] = [];
 const trades: Map<string, IClientTrade> = new Map();
 const playerMap: Map<string, IClientMapEntry> = new Map();
 
-export function getPlayerMap() {
+export function getPlayerMap(): Map<string, IClientMapEntry> {
    return playerMap;
 }
 
@@ -125,6 +125,9 @@ function getServerAddress(): string {
    if (import.meta.env.DEV) {
       const url = new URLSearchParams(window.location.search);
       return url.get("server") ?? "ws://localhost:8000";
+   }
+   if (getGameOptions().useMirrorServer) {
+      return "wss://us.cividle.com";
    }
    return "wss://de.cividle.com";
 }
@@ -348,21 +351,26 @@ export async function connectWebSocket(): Promise<IWelcomeMessage> {
             if (hasFlag(user.attr, UserAttributes.DLC1) && !options.supporterPackPurchased) {
                showModal(<SupporterPackModal />);
             }
-            switch (options.rankUpFlags) {
-               case RankUpFlags.Unset:
-                  if (user.level <= AccountLevel.Tribune) {
-                     options.rankUpFlags = RankUpFlags.NotUpgraded;
-                  } else {
-                     options.rankUpFlags = RankUpFlags.Upgraded;
-                  }
-                  break;
-               case RankUpFlags.NotUpgraded:
-                  if (user.level > AccountLevel.Tribune) {
-                     client.resetRank();
-                  }
-                  break;
-               case RankUpFlags.Upgraded:
-                  break;
+            if (isSaveOwner(w.platformInfo, w.user)) {
+               switch (options.rankUpFlags) {
+                  case RankUpFlags.Unset:
+                     if (user.level <= AccountLevel.Tribune) {
+                        options.rankUpFlags = RankUpFlags.NotUpgraded;
+                     } else {
+                        options.rankUpFlags = RankUpFlags.Upgraded;
+                     }
+                     break;
+                  case RankUpFlags.NotUpgraded:
+                     if (
+                        !hasFlag(user.attr, UserAttributes.OverrideRankUp) &&
+                        user.level > AccountLevel.Tribune
+                     ) {
+                        client.resetRank();
+                     }
+                     break;
+                  case RankUpFlags.Upgraded:
+                     break;
+               }
             }
             saveGame().catch(console.error);
             OnUserChanged.emit(user);
@@ -426,7 +434,6 @@ export async function connectWebSocket(): Promise<IWelcomeMessage> {
          }
          case MessageType.PendingClaim: {
             const r = message as IPendingClaimMessage;
-            console.log(r, user);
             if (user && r.claims[user.userId]) {
                if (getGameOptions().tradeFilledSound) {
                   playKaching();

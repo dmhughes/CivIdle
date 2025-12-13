@@ -40,11 +40,11 @@ export function BuildingIOTreeViewComponent({
             const electrificationLevel = Tick.current.electrified.get(xy) ?? 0;
             let baseValue = buildingType ? (Config.Building[buildingType][type][k] ?? 0) : 0;
             if (buildingType === "CloneFactory") {
-               baseValue = type === "input" ? 1 : 2;
+               baseValue = 1;
             }
             if (building && "inputResource" in building && buildingType === "CloneLab") {
                const clone = building as ICloneBuildingData;
-               baseValue = type === "input" ? 1 : getCloneLabScienceOutput(clone);
+               baseValue = type === "input" ? 1 : getCloneLabScienceOutput(clone) / 2;
             }
             return (
                <li key={k}>

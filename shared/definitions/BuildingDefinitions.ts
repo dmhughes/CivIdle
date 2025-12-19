@@ -2394,7 +2394,7 @@ export class BuildingDefinitions {
       construction: {},
       max: 0,
       special: BuildingSpecial.NaturalWonder,
-      wikipedia: "Aurora_Borealis",
+      wikipedia: "Lake_Louise_(Alberta)",
    };
 
    DinosaurProvincialPark: IBuildingDefinition = {

@@ -12,6 +12,7 @@ import {
    UserAttributes,
    type AccountLevel,
    type ChatChannel,
+   type IUser,
 } from "../../../shared/utilities/Database";
 import {
    clamp,
@@ -79,7 +80,8 @@ export async function handleChatCommand(command: string): Promise<void> {
          savedGame.options.userId = null;
          const bytes = await compressSave(savedGame);
          const stream = await handle.createWritable();
-         await stream.write(bytes);
+         // create a plain ArrayBuffer copy to satisfy the FileSystemWritableFileStream typings
+         await stream.write(new Uint8Array(bytes).buffer);
          await stream.close();
          break;
       }
@@ -113,7 +115,11 @@ export async function handleChatCommand(command: string): Promise<void> {
                MAX_TECH_AGE,
                getGameState().city,
             );
-            await resetToCity(uuid4(), firstKeyOf(Config.City)!, 0);
+            const cityKey = firstKeyOf(Config.City);
+            if (!cityKey) {
+               throw new Error("No city configured");
+            }
+            await resetToCity(uuid4(), cityKey, 0);
             await saveGame();
             window.location.reload();
          }
@@ -218,7 +224,7 @@ export async function handleChatCommand(command: string): Promise<void> {
             [
                JSON.stringify(user),
                "\nRelated:",
-               ...(await client.queryRelatedPlayers(parts[1])).map((u) => JSON.stringify(u)),
+               ...(await client.queryRelatedPlayers(parts[1])).map((u: IUser) => JSON.stringify(u)),
             ].join("\n"),
          );
          break;
@@ -227,7 +233,7 @@ export async function handleChatCommand(command: string): Promise<void> {
          const result = await client.listSpecialPlayers();
          const json = JSON.stringify(result);
          navigator.clipboard.writeText(json);
-         const rows = result.map((user) => {
+         const rows = result.map((user: IUser) => {
             const ev = user.heartbeatData?.empireValue ?? 0;
             const gp = user.heartbeatData?.greatPeopleLevel ?? 0;
             const clientTick = user.heartbeatData?.clientTick ?? 0;
@@ -334,7 +340,7 @@ export async function handleChatCommand(command: string): Promise<void> {
          const result = await client.getGreatPeopleLevelRank(safeParseInt(parts[1], 10));
          const json = JSON.stringify(result);
          navigator.clipboard.writeText(json);
-         const rows = result.map((user) => {
+         const rows = result.map((user: IUser) => {
             const gp = user.heartbeatData?.greatPeopleLevel ?? 0;
             return [
                user.handle.padEnd(16),
@@ -365,17 +371,17 @@ export async function handleChatCommand(command: string): Promise<void> {
          const result = await client.getEmpireValueRank(safeParseInt(parts[1], 10));
          const json = JSON.stringify(result);
          navigator.clipboard.writeText(json);
-         const rows = result.map((user) => {
+         const rows = result.map((user: IUser) => {
             const ev = user.heartbeatData?.empireValue ?? 0;
+            const clientTick = user.heartbeatData?.clientTick ?? 1;
+            const gpLevel = user.heartbeatData?.greatPeopleLevel ?? 1;
             return [
                user.handle.padEnd(16),
                (hasFlag(user.attr, UserAttributes.DLC1) ? "*" : " ").padEnd(2),
                (numberToRoman(user.level + 1) ?? "").padEnd(6),
                formatNumber(ev).padStart(10),
-               formatNumber(ev / user.heartbeatData!.clientTick).padStart(10),
-               formatNumber(
-                  ev / user.heartbeatData!.clientTick / (user.heartbeatData?.greatPeopleLevel ?? 1),
-               ).padStart(10),
+               formatNumber(ev / clientTick).padStart(10),
+               formatNumber(ev / clientTick / gpLevel).padStart(10),
                `${Math.floor(user.totalPlayTime / 3600)}h`.padStart(10),
             ].join("");
          });
@@ -426,7 +432,7 @@ export async function handleChatCommand(command: string): Promise<void> {
          const mutedPlayers = await client.getMutedPlayers();
          addSystemMessage(
             `<code>${mutedPlayers
-               .map((m) => {
+               .map((m: { handle: string; time: number }) => {
                   return `${m.handle} muted until ${new Date(m.time).toLocaleString()}`;
                })
                .join("\n")}</code>`,
@@ -445,7 +451,7 @@ export async function handleChatCommand(command: string): Promise<void> {
          const mutedPlayers = await client.getSlowedPlayer();
          addSystemMessage(
             `<code>${mutedPlayers
-               .map((m) => {
+               .map((m: { handle: string; time: number; interval: number }) => {
                   const t = new Date(m.time).toLocaleString();
                   const i = Math.ceil(m.interval / SECOND);
                   return `${m.handle} slowed for ${i}s until ${t}`;

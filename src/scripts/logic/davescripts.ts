@@ -1257,14 +1257,14 @@ export async function largeHadronCollider4(): Promise<{
 		return { leftStripPlacement: [], removed, message: "No map tiles available" };
 	}
 	const minX = 0;
-	const maxX = Math.min(width - 1, minX + 24); // 25 tiles wide
+	const maxX = Math.min(width - 1, minX + 34); // 35 tiles wide
 	const minY = 0;
 	const maxY = height - 1;
 
 	const plan: Array<{ type: Building; total: number }> = [
-		{ type: "HedgeFund" as Building, total: 250 },
-		{ type: "SupercomputerLab" as Building, total: 250 },
-		{ type: "CivTok" as Building, total: 400 },
+		{ type: "HedgeFund" as Building, total: 400 },
+		{ type: "SupercomputerLab" as Building, total: 400 },
+		{ type: "CivTok" as Building, total: 550 },
 	];
 
 	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

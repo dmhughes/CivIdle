@@ -38,6 +38,7 @@ import { Tick } from "./TickLogic";
 // other one!
 export function getRebirthGreatPeopleCount(): number {
    return clamp(Math.floor(Math.cbrt(Tick.current.totalValue / 1e6) / 4), 0, Number.POSITIVE_INFINITY);
+ //return 1e11;
 }
 
 export function getValueRequiredForGreatPeople(count: number): number {
@@ -180,14 +181,9 @@ export function rollPermanentGreatPeople(
    city: City,
 ): GreatPeopleChoiceV2[] {
    const result: GreatPeopleChoiceV2[] = [];
-   const currentTechAgeIdx = Config.TechAge[currentAge].idx;
+   // Include Great People from ALL ages for rebirth selections; only filter by city restriction.
    const pool = keysOf(
-      filterOf(
-         Config.GreatPerson,
-         (_, v) =>
-            (isNullOrUndefined(v.city) || v.city === city) &&
-            Config.TechAge[v.age].idx <= currentTechAgeIdx + 1,
-      ),
+      filterOf(Config.GreatPerson, (_, v) => isNullOrUndefined(v.city) || v.city === city),
    );
    let amountLeft = totalAmount;
    let candidates = shuffle([...pool]);

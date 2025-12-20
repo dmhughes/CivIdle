@@ -1705,14 +1705,14 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
       case "CentrePompidou": {
          const pompidou = building as ICentrePompidouBuildingData;
             const multiplier = isFestival("CentrePompidou", gs) ? 2 : 1;
-            // Fixed Pompidou bonus as requested: 14 (output) and 28 (storage) per effect
-            const fixedBonus = 14;
+            // The Pompidou should apply its bonus per civilisation (use the tracked cities set size)
+            const effectCount = Math.max(1, pompidou.cities?.size ?? pompidou.level ?? 1);
             Tick.next.globalMultipliers.output.push({
-               value: multiplier * fixedBonus,
+               value: multiplier * effectCount,
                source: buildingName,
             });
             Tick.next.globalMultipliers.storage.push({
-               value: 2 * multiplier * fixedBonus,
+               value: 2 * multiplier * effectCount,
                source: buildingName,
             });
          building.resources = {};

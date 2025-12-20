@@ -7,6 +7,7 @@ import { Config } from "../../../shared/logic/Config";
 import { GOOGLE_PLAY_GAMES_CLIENT_ID } from "../../../shared/logic/Constants";
 import { PremiumTileTextures, RankUpFlags } from "../../../shared/logic/GameState";
 import { checksum, getGameOptions, getGameState } from "../../../shared/logic/GameStateLogic";
+import { Tick } from "../../../shared/logic/TickLogic";
 import { RpcError, removeTrailingUndefs, rpcClient } from "../../../shared/thirdparty/TRPCClient";
 import type {
    AllMessageTypes,
@@ -536,6 +537,9 @@ export function isAllyWith(tile: IClientMapEntry): boolean {
    }
    if (!tile.city) {
       return false;
+   }
+   if (Tick.current.specialBuildings.has("LakeLouise")) {
+      return true;
    }
    return tile.city === getGameState().city;
 }

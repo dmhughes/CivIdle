@@ -1844,31 +1844,16 @@ export const EN = {
    Russian: "Russian",
    KizhiPogost: "Kizhi Pogost",
    KizhiPogostDesc: "All buildings within 2-tile range get +X Production Multiplier. X = the production multiplier this wonder receives",
-<<<<<<< HEAD
-   Maslenitsa: "Maslenitsa: Double the range of Kizhi Pogost, Savior on Spilled Blood, and Lake Baikal",
-=======
    Maslenitsa: "Maslenitsa: Double the range of Kizhi Pogost and Lake Baikal. Double the power output of Akademik Lomonosov",
->>>>>>> 66bec29d (1.1 (#562))
    LakeBaikal: "Lake Baikal",
    LakeBaikalDesc: "+X Builder Capacity Multiplier. X = total levels of wonders within 2-tile range",
    Hermitage: "Hermitage",
    HermitageDesc: "This wonder can be upgraded and each level provides +1 Storage Multiplier to each type of building within 2-tile range",
-<<<<<<< HEAD
-   SaviorOnSpilledBlood: "Savior on Spilled Blood",
-   SaviorOnSpilledBloodDesc: "All buildings within 2-tile range get +X Production Multiplier. X is based on the time since the wonder was constructed",
-=======
->>>>>>> 66bec29d (1.1 (#562))
    ConstructedTime: "Constructed Time",
    ConstructedTimeHours: "Constructed Time (hours)",
    Sputnik1: "Sputnik 1",
    Sputnik1Desc: "This wonder can be upgraded and each level provides +1 level to all Cold War Age great people for this run (excl. Great People that provide level boost)",
    AkademikLomonosov: "Akademik Lomonosov",
-<<<<<<< HEAD
-   AkademikLomonosovDesc: "This wonder can be upgraded and each level provides 100KW of power. Provides +X Production and Storage Multiplier to Crypto Fund. X = Information Age Wisdom Level. Provide power to all tiles within 2 tile range. This wonder can be moved",
-   Kremlin: "Kremlin",
-   AndreyKolmogorov: "Andrey Kolmogorov",
-   Tchaikovsky: "Tchaikovsky",
-=======
    AkademikLomonosovDesc: "This wonder can be upgraded and each level provides 100KW of power. Provides +X Production and Storage Multiplier to Cosmodrome. X = Cold War Age Wisdom Level. Provide power to all tiles within 2 tile range. This wonder can be moved",
    Kremlin: "Kremlin",
    AndreyKolmogorov: "Andrey Kolmogorov",
@@ -1897,5 +1882,10 @@ export const EN = {
    WTOVoteEndIn: "You can change your vote any time before the voting ends in <b>%{time}</b>",
    UNVoteDescriptionHTML: "Buildings voted in UN General Assembly get <b>+5 Production Multiplier</b>",
    WTOVoteDescriptionHTML: "Buildings voted in World Trade Organization has a <b>higher chance</b> to appear in Trade Tile Bonus",
->>>>>>> 66bec29d (1.1 (#562))
+   PinWatchedResourceTab: "Pin Watched Resources",
+   PinWatchedResourceTabDescHTML: "Pin Watched Resources Tab to the left",
+   EnableTodo: "Enable",
+   PinTodo: "Pin",
+   PinTodoTooltip: "Pin a todo tab to the leftmost position",
+   TodoTabs: "Todo Tabs",
 };

@@ -293,6 +293,7 @@ export class GameOptions {
    useScientificFormat = false;
    showTutorial = true;
    disabledTodos = new Set<string>();
+   pinnedTodos = new Set<string>();
    showWonderPopup = true;
    rankUpFlags = RankUpFlags.NotUpgraded;
    showNaturalWonderPopup = true;

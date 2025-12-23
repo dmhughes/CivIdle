@@ -831,12 +831,21 @@ export class BuildingDefinitions {
       output: { Bitcoin: 1 },
       power: true,
    };
+<<<<<<< HEAD
+   CryptoFund: IBuildingDefinition = {
+      name: () => t(L.CryptoFund),
+      input: { HedgeFund: 4, CivTok: 2 },
+      output: { Bitcoin: 2 },
+      power: true,
+   };
+=======
    // CryptoFund: IBuildingDefinition = {
    //    name: () => t(L.CryptoFund),
    //    input: { HedgeFund: 4, CivTok: 2 },
    //    output: { Bitcoin: 2 },
    //    power: true,
    // };
+>>>>>>> upstream/main
    Caravansary: IBuildingDefinition = {
       name: () => t(L.Caravansary),
       desc: () => t(L.CaravansaryDesc),
@@ -2324,6 +2333,20 @@ export class BuildingDefinitions {
       wikipedia: "Hermitage_Museum",
    };
 
+<<<<<<< HEAD
+   SaviorOnSpilledBlood: IBuildingDefinition = {
+      name: () => t(L.SaviorOnSpilledBlood),
+      desc: () => t(L.SaviorOnSpilledBloodDesc),
+      input: {},
+      output: {},
+      construction: { Tank: 100, Biplane: 100, Ironclad: 100 },
+      max: 1,
+      special: BuildingSpecial.WorldWonder,
+      wikipedia: "Church_of_the_Savior_on_Blood",
+   };
+
+=======
+>>>>>>> upstream/main
    Sputnik1: IBuildingDefinition = {
       name: () => t(L.Sputnik1),
       desc: () => t(L.Sputnik1Desc),
@@ -2340,12 +2363,18 @@ export class BuildingDefinitions {
       desc: () => t(L.AkademikLomonosovDesc),
       input: {},
       output: {},
+<<<<<<< HEAD
+      construction: { Bitcoin: 500 },
+=======
       construction: { Spacecraft: 500 },
+>>>>>>> upstream/main
       max: 1,
       special: BuildingSpecial.WorldWonder,
       wikipedia: "Akademik_Lomonosov",
    };
 
+<<<<<<< HEAD
+=======
    AuroraBorealis: IBuildingDefinition = {
       name: () => t(L.AuroraBorealis),
       desc: () => t(L.AuroraBorealisDesc),
@@ -2412,6 +2441,7 @@ export class BuildingDefinitions {
       wikipedia: "World_Trade_Organization",
    };
 
+>>>>>>> upstream/main
    // #endregion /////////////////////////////////////////////////////////////////////////////////////////////
 
    // Winery: IBuildingDefinition = {
@@ -2518,9 +2548,12 @@ export const BuildingShowLevel = new Set<Building>([
    "Hermitage",
    "Sputnik1",
    "AkademikLomonosov",
+<<<<<<< HEAD
+=======
    "ChateauFrontenac",
    "Habitat67",
    "WorldTradeOrganization",
+>>>>>>> upstream/main
 ] satisfies Building[]);
 
 // This controls whether we allow upgrade for multiple levels. e.g. Tradition/Religion/Ideology wonders should NOT allow this!
@@ -2547,9 +2580,12 @@ export const UpgradableWorldWonders = new Set<Building>([
    "Hermitage",
    "Sputnik1",
    "AkademikLomonosov",
+<<<<<<< HEAD
+=======
    "ChateauFrontenac",
    "Habitat67",
    "WorldTradeOrganization",
+>>>>>>> upstream/main
 ] satisfies Building[]);
 
 // Include buildings here that does not really cost construction resources to upgrade

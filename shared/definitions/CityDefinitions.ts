@@ -483,11 +483,20 @@ export class CityDefinitions {
          Headquarter: () => t(L.Kremlin),
       },
       uniqueBuildings: {
+<<<<<<< HEAD
+         CryptoFund: "Blockchain",
+         KizhiPogost: "Alloy",
+         Hermitage: "Journalism",
+         SaviorOnSpilledBlood: "Aviation",
+         Sputnik1: "Satellite",
+         AkademikLomonosov: "Blockchain",
+=======
          Cosmodrome: "SpaceProgram",
          KizhiPogost: "Alloy",
          Hermitage: "Journalism",
          Sputnik1: "Satellite",
          AkademikLomonosov: "Genetics",
+>>>>>>> upstream/main
       },
       uniqueMultipliers: {},
       naturalWonders: {
@@ -498,6 +507,8 @@ export class CityDefinitions {
       festivalDesc: () => t(L.Maslenitsa),
       uniqueEffects: () => [],
    };
+<<<<<<< HEAD
+=======
 
    Canadian: ICityDefinition = {
       name: () => t(L.Canadian),
@@ -534,6 +545,7 @@ export class CityDefinitions {
       festivalDesc: () => t(L.WinterCarnival),
       uniqueEffects: () => [],
    };
+>>>>>>> upstream/main
 }
 
 export type City = keyof CityDefinitions;

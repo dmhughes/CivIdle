@@ -31,6 +31,7 @@ import { Tick } from "../../../shared/logic/TickLogic";
 import {
    makeBuilding,
    type IBuildingData,
+   type ISaviorOnSpilledBloodBuildingData,
 } from "../../../shared/logic/Tile";
 import { OnBuildingComplete } from "../../../shared/logic/Update";
 import {
@@ -286,7 +287,11 @@ export function onBuildingComplete(xy: Tile): void {
          }
          break;
       }
-      /* SaviorOnSpilledBlood removed upstream; no action required here. */
+      case "SaviorOnSpilledBlood": {
+         const saviorOnSpilledBlood = building as ISaviorOnSpilledBloodBuildingData;
+         saviorOnSpilledBlood.constructedTick = gs.tick;
+         break;
+      }
    }
    checkCerneAbbasGiant(building, gs);
    if (isWorldWonder(building.type) && getGameOptions().showWonderPopup && !hasOpenModal()) {

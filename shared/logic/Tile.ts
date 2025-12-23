@@ -165,6 +165,10 @@ export interface IItaipuDamBuildingData extends IBuildingData {
    productionMultiplier: number;
 }
 
+<<<<<<< HEAD
+export interface ISaviorOnSpilledBloodBuildingData extends IBuildingData {
+   constructedTick: number;
+=======
 export interface IAuroraBorealisBuildingData extends IBuildingData {
    startTick: number;
 }
@@ -175,6 +179,7 @@ export interface IChateauFrontenacBuildingData extends IBuildingData {
 
 export interface IDinosaurProvincialParkBuildingData extends IBuildingData {
    used: boolean;
+>>>>>>> upstream/main
 }
 
 export type IHaveTypeAndLevel = Pick<IBuildingData, "type" | "level">;
@@ -326,6 +331,12 @@ export function makeBuilding(data: Pick<IBuildingData, "type"> & Partial<IBuildi
          }
          break;
       }
+<<<<<<< HEAD
+      case "SaviorOnSpilledBlood": {
+         const saviorOnSpilledBlood = building as ISaviorOnSpilledBloodBuildingData;
+         if (!saviorOnSpilledBlood.constructedTick) {
+            saviorOnSpilledBlood.constructedTick = 0;
+=======
       case "AuroraBorealis": {
          const auroraBorealis = building as IAuroraBorealisBuildingData;
          if (!auroraBorealis.startTick) {
@@ -344,6 +355,7 @@ export function makeBuilding(data: Pick<IBuildingData, "type"> & Partial<IBuildi
          const dinosaurProvincialPark = building as IDinosaurProvincialParkBuildingData;
          if (!dinosaurProvincialPark.used) {
             dinosaurProvincialPark.used = false;
+>>>>>>> upstream/main
          }
          break;
       }

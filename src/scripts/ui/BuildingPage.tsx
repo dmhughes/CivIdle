@@ -15,9 +15,7 @@ import { BritishMuseumBuildingBody } from "./BritishMuseumBuildingBody";
 import { BroadwayBuildingBody } from "./BroadwayBuildingBody";
 import { CathedralOfBrasiliaBuildingBody } from "./CathedralOfBrasiliaBuildingBody";
 import { CentrePompidouBuildingBody } from "./CentrePompidouBuildingBody";
-import { ChateauFrontenacBuildingBody } from "./ChateauFrontenacBuildingBody";
 import { DefaultBuildingBody } from "./DefaultBuildingBody";
-import { DinosaurProvincialParkBuildingBody } from "./DinosaurProvincialParkBuildingBody";
 import { EastIndiaCompanyBuildingBody } from "./EastIndiaCompanyBuildingBody";
 import { EuphratesRiverBuildingBody } from "./EuphratesRiverBuildingBody";
 import { GrandBazaarBuildingBody } from "./GrandBazaarBuildingBody";
@@ -35,11 +33,7 @@ import { MontSaintMichelBuildingBody } from "./MontSaintMichelBuildingBody";
 import { PetraBuildingBody } from "./PetraBuildingBody";
 import { PlayerTradeBuildingBody } from "./PlayerTradeBuildingBody";
 import { ReligionBuildingBody } from "./ReligionBuildingBody";
-<<<<<<< HEAD
 import { SaviorOnSpilledBloodBuildingBody } from "./SaviorOnSpilledBloodBuildingBody";
-=======
-import { SaviorOnSpilledBloodBuildingBody as AuroraBorealisBuildingBody } from "./SaviorOnSpilledBloodBuildingBody";
->>>>>>> upstream/main
 import { ScienceProductionWonderBuildingBody } from "./ScienceProductionWonderBuildingBody";
 import { StatisticsBuildingBody } from "./StatisticsBuildingBody";
 import { SwissBankBuildingBody } from "./SwissBankBuildingBody";
@@ -52,7 +46,6 @@ import { UnitedNationsBuildingBody } from "./UnitedNationsBuildingBody";
 import { UpgradableWonderBuildingBody } from "./UpgradableWonderBuildingBody";
 import { WarehouseBuildingBody } from "./WarehouseBuildingBody";
 import { ZugspitzeBuildingBody } from "./ZugspitzeBuildingBody";
-import { WorldTradeOrganizationBuildingBody } from "./WorldTradeOrganizationBuildingBody";
 
 const BuildingBodyOverride: Partial<Record<Building, FunctionComponent<IBuildingComponentProps>>> = {
    Headquarter: HeadquarterBuildingBody,
@@ -106,19 +99,9 @@ const BuildingBodyOverride: Partial<Record<Building, FunctionComponent<IBuilding
    GreatOceanRoad: UpgradableWonderBuildingBody,
    KizhiPogost: KizhiPogostBuildingBody,
    Hermitage: UpgradableWonderBuildingBody,
-<<<<<<< HEAD
    SaviorOnSpilledBlood: SaviorOnSpilledBloodBuildingBody,
    Sputnik1: UpgradableWonderBuildingBody,
    AkademikLomonosov: AkademikLomonosovBuildingBody,
-=======
-   AuroraBorealis: AuroraBorealisBuildingBody,
-   Sputnik1: UpgradableWonderBuildingBody,
-   AkademikLomonosov: AkademikLomonosovBuildingBody,
-   ChateauFrontenac: ChateauFrontenacBuildingBody,
-   DinosaurProvincialPark: DinosaurProvincialParkBuildingBody,
-   Habitat67: UpgradableWonderBuildingBody,
-   WorldTradeOrganization: WorldTradeOrganizationBuildingBody,
->>>>>>> upstream/main
 };
 
 export function BuildingPage(props: { tile: ITileData }): React.ReactNode {

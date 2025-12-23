@@ -130,12 +130,12 @@ export function getTotalSeaTileCost(path: string[], seaTileCost: number): number
 
 export const RequestPathFinderGridUpdate = new TypedEvent<void>();
 
-export function getWeekId(): number {
+export function getVotedBoostId(): number {
    return Math.floor(Date.now() / WEEK);
 }
 
 export function getVotingTime(): number {
-   return (getWeekId() + 1) * WEEK - Date.now();
+   return (getVotedBoostId() + 1) * WEEK - Date.now();
 }
 
 export function hasResourceForPlayerTrade(res: Material): boolean {

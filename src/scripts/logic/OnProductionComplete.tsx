@@ -3,7 +3,6 @@ import { GreatPersonTickFlag, type GreatPerson } from "../../../shared/definitio
 import {
    IOFlags,
    addWorkers,
-   saviorOnSpilledBloodProductionMultiplier as auroraBorealisProductionMultiplier,
    forEachMultiplier,
    generateScienceFromFaith,
    getAvailableWorkers,
@@ -51,7 +50,7 @@ import {
    getXyBuildings,
 } from "../../../shared/logic/IntraTickCache";
 import { LogicResult } from "../../../shared/logic/LogicResult";
-import { getWeekId } from "../../../shared/logic/PlayerTradeLogic";
+import { getVotedBoostId } from "../../../shared/logic/PlayerTradeLogic";
 import {
    getGreatPeopleChoiceCount,
    getGreatPeopleForWisdom,
@@ -69,9 +68,7 @@ import {
 } from "../../../shared/logic/TechLogic";
 import { NotProducingReason, Tick } from "../../../shared/logic/TickLogic";
 import type {
-   IAuroraBorealisBuildingData,
    ICentrePompidouBuildingData,
-   IChateauFrontenacBuildingData,
    IGreatPeopleBuildingData,
    IIdeologyBuildingData,
    IItaipuDamBuildingData,
@@ -83,7 +80,7 @@ import type {
    ITraditionBuildingData,
    IZugspitzeBuildingData,
 } from "../../../shared/logic/Tile";
-import { addLevelBoost, addMultiplier, tickUnlockable } from "../../../shared/logic/Update";
+import { addMultiplier, tickUnlockable } from "../../../shared/logic/Update";
 import { VotedBoostType, type IGetVotedBoostResponse } from "../../../shared/utilities/Database";
 import {
    MINUTE,
@@ -158,22 +155,19 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
 
          populateTileBuildings();
 
-         const wtoLevel = Tick.current.specialBuildings.get("WorldTradeOrganization")?.building.level ?? 0;
-
          getOwnedOrOccupiedTiles().forEach((xy, i) => {
             const building = TileBuildings.get(xy);
             if (building) {
                addMultiplier(
                   building,
-                  { output: TRADE_TILE_BONUS + wtoLevel, unstable: true },
+                  { output: TRADE_TILE_BONUS },
                   `${t(L.PlayerMapMapTileBonus)} (${i + 1})`,
                );
             }
          });
 
          let allyCount = 0;
-         const hasLakeLouise = Tick.current.specialBuildings.has("LakeLouise");
-         const levelBoosts = new Map<Building, number>();
+
          getNeighboringPlayers().forEach((player) => {
             let isAlly = false;
             player.forEach(([xy, tile]) => {
@@ -183,16 +177,13 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
                      isAlly = true;
                      addMultiplier(
                         building,
-                        { output: TRADE_TILE_ALLY_BONUS, unstable: true },
+                        { output: TRADE_TILE_ALLY_BONUS },
                         `${t(L.PlayerMapMapAllyTileBonus)} (${tile.handle})`,
                      );
-                     if (hasLakeLouise) {
-                        mapSafeAdd(levelBoosts, building, TRADE_TILE_ALLY_BONUS);
-                     }
                   } else {
                      addMultiplier(
                         building,
-                        { output: TRADE_TILE_NEIGHBOR_BONUS, unstable: true },
+                        { output: TRADE_TILE_NEIGHBOR_BONUS },
                         `${t(L.PlayerMapMapNeighborTileBonus)} (${tile.handle})`,
                      );
                   }
@@ -202,11 +193,6 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
                ++allyCount;
             }
          });
-
-         console.log(levelBoosts);
-         for (const [building, level] of levelBoosts) {
-            addLevelBoost(building, level, buildingName, gs);
-         }
 
          if (isSteam() && allyCount > 0 && !declareFriendshipAchievementUnlocked) {
             SteamClient.unlockAchievement("DeclareFriendship");
@@ -859,7 +845,7 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
          // We update this every minute to reduce server load
          if (Date.now() - lastVotedBoostUpdatedAt > MINUTE) {
             lastVotedBoostUpdatedAt = Date.now();
-            if (votedBoost === null || getWeekId() !== votedBoost.id) {
+            if (votedBoost === null || getVotedBoostId() !== votedBoost.id) {
                client.getVotedBoosts().then((resp) => {
                   votedBoost = resp;
                });
@@ -2036,7 +2022,12 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
          });
 
          buildings.forEach((b) => {
-            addLevelBoost(b, building.level, buildingName, gs);
+            getBuildingsByType(b, gs)?.forEach((b, xy) => {
+               mapSafePush(Tick.next.levelBoost, xy, {
+                  value: building.level,
+                  source: buildingName,
+               });
+            });
          });
 
          if (isFestival(building.type, gs)) {
@@ -2123,7 +2114,6 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
          });
          break;
       }
-<<<<<<< HEAD
       case "SaviorOnSpilledBlood": {
          const saviorOnSpilledBlood = building as ISaviorOnSpilledBloodBuildingData;
          const constructedHours = Math.floor((gs.tick - saviorOnSpilledBlood.constructedTick) / 3600);
@@ -2141,8 +2131,6 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
          }
          break;
       }
-=======
->>>>>>> upstream/main
       case "Sputnik1": {
          forEach(Config.GreatPerson, (p, def) => {
             if (def.age === "ColdWarAge") {
@@ -2155,82 +2143,16 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
          for (const point of grid.getRange(tileToPoint(xy), 2)) {
             Tick.next.powerGrid.add(pointToTile(point));
          }
-<<<<<<< HEAD
          mapSafeAdd(Tick.next.workersAvailable, "Power", 100_000 * building.level);
          const informationAgeWisdom = options.ageWisdom.InformationAge ?? 0;
          if (informationAgeWisdom > 0) {
             addMultiplier(
                "CryptoFund",
                { output: informationAgeWisdom, storage: informationAgeWisdom },
-=======
-         const multiplier = isFestival(building.type, gs) ? 2 : 1;
-         mapSafeAdd(Tick.next.workersAvailable, "Power", 100_000 * building.level * multiplier);
-         const ageWisdomLevel = options.ageWisdom.ColdWarAge ?? 0;
-         if (ageWisdomLevel > 0) {
-            addMultiplier(
-               "Cosmodrome",
-               { output: ageWisdomLevel * multiplier, storage: ageWisdomLevel * multiplier },
->>>>>>> upstream/main
                buildingName,
             );
          }
          break;
       }
-<<<<<<< HEAD
-=======
-      case "AuroraBorealis": {
-         const auroraBorealis = building as IAuroraBorealisBuildingData;
-         const hours = Math.floor((gs.tick - auroraBorealis.startTick) / 3600);
-         const range = isFestival(building.type, gs) ? 4 : 2;
-         const multiplier = auroraBorealisProductionMultiplier(hours);
-         for (const point of grid.getRange(tileToPoint(xy), range)) {
-            const targetXy = pointToTile(point);
-            if (targetXy === xy) {
-               continue;
-            }
-            const building = gs.tiles.get(targetXy)?.building;
-            if (building && !Config.Building[building.type].output.Worker) {
-               mapSafePush(Tick.next.tileMultipliers, targetXy, {
-                  output: multiplier,
-                  source: buildingName,
-                  unstable: true,
-               });
-            }
-         }
-         break;
-      }
-      case "ChateauFrontenac": {
-         const chateauFrontenac = building as IChateauFrontenacBuildingData;
-         const result = new Map<Building, number>();
-         forEach(chateauFrontenac.buildings, (_, data) => {
-            if (data.selected) {
-               mapSafeAdd(result, data.selected, 1);
-            }
-         });
-         const multiplier = isFestival(building.type, gs) ? 2 : 1;
-         result.forEach((level, building) => {
-            addLevelBoost(building, level * multiplier, buildingName, gs);
-         });
-         break;
-      }
-      case "Habitat67": {
-         addMultiplier(
-            "AILab",
-            {
-               output: building.level + getWonderExtraLevel(building.type),
-               worker: building.level,
-               storage: building.level,
-            },
-            buildingName,
-         );
-         const happiness = Tick.current.happiness?.value ?? 0;
-         const multiplier = isFestival(building.type, gs) ? 2 : 1;
-         const levelBoost = Math.floor(happiness / 5) * multiplier;
-         if (levelBoost > 0) {
-            addLevelBoost("AILab", levelBoost, buildingName, gs);
-         }
-         break;
-      }
->>>>>>> upstream/main
    }
 }

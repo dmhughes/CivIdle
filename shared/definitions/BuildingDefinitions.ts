@@ -517,12 +517,6 @@ export class BuildingDefinitions {
       output: { CivGPT: 1 },
       power: true,
    };
-   AILab: IBuildingDefinition = {
-      name: () => t(L.AILab),
-      input: { Internet: 2, Supercomputer: 4, Radio: 2 },
-      output: { CivGPT: 2 },
-      power: true,
-   };
    CivTok: IBuildingDefinition = {
       name: () => t(L.CivTok),
       input: { Internet: 1, Politics: 1 },
@@ -762,12 +756,6 @@ export class BuildingDefinitions {
       output: { Spacecraft: 1 },
       power: true,
    };
-   Cosmodrome: IBuildingDefinition = {
-      name: () => t(L.Cosmodrome),
-      input: { Rocket: 4, Satellite: 4, Airplane: 4 },
-      output: { Spacecraft: 2 },
-      power: true,
-   };
    SemiconductorFab: IBuildingDefinition = {
       name: () => t(L.SemiconductorFab),
       input: { Silicon: 10, Copper: 10 },
@@ -831,21 +819,12 @@ export class BuildingDefinitions {
       output: { Bitcoin: 1 },
       power: true,
    };
-<<<<<<< HEAD
    CryptoFund: IBuildingDefinition = {
       name: () => t(L.CryptoFund),
       input: { HedgeFund: 4, CivTok: 2 },
       output: { Bitcoin: 2 },
       power: true,
    };
-=======
-   // CryptoFund: IBuildingDefinition = {
-   //    name: () => t(L.CryptoFund),
-   //    input: { HedgeFund: 4, CivTok: 2 },
-   //    output: { Bitcoin: 2 },
-   //    power: true,
-   // };
->>>>>>> upstream/main
    Caravansary: IBuildingDefinition = {
       name: () => t(L.Caravansary),
       desc: () => t(L.CaravansaryDesc),
@@ -2333,7 +2312,6 @@ export class BuildingDefinitions {
       wikipedia: "Hermitage_Museum",
    };
 
-<<<<<<< HEAD
    SaviorOnSpilledBlood: IBuildingDefinition = {
       name: () => t(L.SaviorOnSpilledBlood),
       desc: () => t(L.SaviorOnSpilledBloodDesc),
@@ -2345,8 +2323,6 @@ export class BuildingDefinitions {
       wikipedia: "Church_of_the_Savior_on_Blood",
    };
 
-=======
->>>>>>> upstream/main
    Sputnik1: IBuildingDefinition = {
       name: () => t(L.Sputnik1),
       desc: () => t(L.Sputnik1Desc),
@@ -2363,85 +2339,12 @@ export class BuildingDefinitions {
       desc: () => t(L.AkademikLomonosovDesc),
       input: {},
       output: {},
-<<<<<<< HEAD
       construction: { Bitcoin: 500 },
-=======
-      construction: { Spacecraft: 500 },
->>>>>>> upstream/main
       max: 1,
       special: BuildingSpecial.WorldWonder,
       wikipedia: "Akademik_Lomonosov",
    };
 
-<<<<<<< HEAD
-=======
-   AuroraBorealis: IBuildingDefinition = {
-      name: () => t(L.AuroraBorealis),
-      desc: () => t(L.AuroraBorealisDesc),
-      input: {},
-      output: {},
-      construction: {},
-      max: 0,
-      special: BuildingSpecial.NaturalWonder,
-      wikipedia: "Aurora_Borealis",
-   };
-
-   LakeLouise: IBuildingDefinition = {
-      name: () => t(L.LakeLouise),
-      desc: () => t(L.LakeLouiseDesc),
-      input: {},
-      output: {},
-      construction: {},
-      max: 0,
-      special: BuildingSpecial.NaturalWonder,
-      wikipedia: "Lake_Louise_(Alberta)",
-   };
-
-   DinosaurProvincialPark: IBuildingDefinition = {
-      name: () => t(L.DinosaurProvincialPark),
-      desc: () => t(L.DinosaurProvincialParkDesc),
-      input: {},
-      output: {},
-      construction: {},
-      max: 0,
-      special: BuildingSpecial.NaturalWonder,
-      wikipedia: "Dinosaur_Provincial_Park",
-   };
-
-   ChateauFrontenac: IBuildingDefinition = {
-      name: () => t(L.ChateauFrontenac),
-      desc: () => t(L.ChateauFrontenacDesc),
-      input: {},
-      output: {},
-      construction: { Tank: 100, Ironclad: 100, Train: 100 },
-      max: 1,
-      special: BuildingSpecial.WorldWonder,
-      wikipedia: "Chateau_Frontenac",
-   };
-
-   Habitat67: IBuildingDefinition = {
-      name: () => t(L.Habitat67),
-      desc: () => t(L.Habitat67Desc),
-      input: {},
-      output: {},
-      construction: { Bitcoin: 500 },
-      max: 1,
-      special: BuildingSpecial.WorldWonder,
-      wikipedia: "Habitat_67",
-   };
-
-   WorldTradeOrganization: IBuildingDefinition = {
-      name: () => t(L.WorldTradeOrganization),
-      desc: () => t(L.WorldTradeOrganizationDesc),
-      input: {},
-      output: {},
-      construction: { MutualFund: 100, Koti: 100, TV: 100 },
-      max: 1,
-      special: BuildingSpecial.WorldWonder,
-      wikipedia: "World_Trade_Organization",
-   };
-
->>>>>>> upstream/main
    // #endregion /////////////////////////////////////////////////////////////////////////////////////////////
 
    // Winery: IBuildingDefinition = {
@@ -2548,12 +2451,6 @@ export const BuildingShowLevel = new Set<Building>([
    "Hermitage",
    "Sputnik1",
    "AkademikLomonosov",
-<<<<<<< HEAD
-=======
-   "ChateauFrontenac",
-   "Habitat67",
-   "WorldTradeOrganization",
->>>>>>> upstream/main
 ] satisfies Building[]);
 
 // This controls whether we allow upgrade for multiple levels. e.g. Tradition/Religion/Ideology wonders should NOT allow this!
@@ -2580,12 +2477,6 @@ export const UpgradableWorldWonders = new Set<Building>([
    "Hermitage",
    "Sputnik1",
    "AkademikLomonosov",
-<<<<<<< HEAD
-=======
-   "ChateauFrontenac",
-   "Habitat67",
-   "WorldTradeOrganization",
->>>>>>> upstream/main
 ] satisfies Building[]);
 
 // Include buildings here that does not really cost construction resources to upgrade
@@ -2599,5 +2490,4 @@ export const IgnoreBuildingUpgradeValue = new Set<Building>([
 export const WonderCostBase: Partial<Record<Building, number>> = {
    SydneyOperaHouse: 5,
    GreatOceanRoad: 1.7,
-   WorldTradeOrganization: 2,
 };

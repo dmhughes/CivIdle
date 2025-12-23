@@ -1,11 +1,11 @@
-import { memo, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { Building } from "../../../shared/definitions/BuildingDefinitions";
 import { Config } from "../../../shared/logic/Config";
 import type { IBuildingComponentProps } from "./BuildingPage";
 
 const WikipediaCache: Map<Building, string> = new Map();
 
-function _BuildingWikipediaComponent({ gameState, xy }: IBuildingComponentProps): React.ReactNode {
+export function BuildingWikipediaComponent({ gameState, xy }: IBuildingComponentProps): React.ReactNode {
    const type = gameState.tiles.get(xy)?.building?.type;
    if (!type) {
       return null;
@@ -52,7 +52,3 @@ function _BuildingWikipediaComponent({ gameState, xy }: IBuildingComponentProps)
       />
    );
 }
-
-export const BuildingWikipediaComponent = memo(_BuildingWikipediaComponent, (prev, next) => {
-   return prev.gameState === next.gameState && prev.xy === next.xy;
-});

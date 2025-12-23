@@ -294,7 +294,6 @@ export interface IGetVotedBoostResponse {
 
 export enum VotedBoostType {
    Multipliers = 0,
-   TradeTileBonus = 1,
 }
 
 export interface IVotedBoostOption {
@@ -313,7 +312,6 @@ export const DB: {
    slowList: Record<string, ISlowModeConfig>;
    greatPeopleRecovery: Record<string, number>;
    votedBoosts: Record<number, IVotedBoost>;
-   tradeTileBonusVotes: Record<number, IVotedBoost>;
    buildHash: Record<string, string>;
 } = {
    chat: [],
@@ -327,7 +325,6 @@ export const DB: {
    greatPeopleRecovery: {},
    votedBoosts: {},
    buildHash: {},
-   tradeTileBonusVotes: {},
 };
 
 export const MoveTileCooldown = 12 * HOUR;

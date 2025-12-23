@@ -25,7 +25,6 @@ import { Tick } from "../../../shared/logic/TickLogic";
 import { UserAttributes } from "../../../shared/utilities/Database";
 import {
    clamp,
-   entriesOf,
    formatPercent,
    hasFlag,
    isEmpty,
@@ -382,9 +381,8 @@ export function RebirthModal(): React.ReactNode {
                )}
                <div className="text-strong mt5 mb5">{t(L.GreatPeople)}</div>
                <div className="inset-shallow white">
-                  {entriesOf(Config.GreatPerson)
-                     .filter(([_, def]) => def.city === nextCity)
-                     .map(([person, def], i) => {
+                  {jsxMapOf(Config.GreatPerson, (person, def, i) => {
+                     if (def.city === nextCity) {
                         return (
                            <div
                               key={person}
@@ -404,7 +402,9 @@ export function RebirthModal(): React.ReactNode {
                               </div>
                            </div>
                         );
-                     })}
+                     }
+                     return null;
+                  })}
                </div>
                <div className="text-strong mt5 mb5">{t(L.Festival)}</div>
                <div className="inset-shallow white">

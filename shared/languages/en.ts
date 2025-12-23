@@ -1745,7 +1745,7 @@ export const EN = {
    YangtzeRiverDesc: "All buildings that consume water get +1 Production, Worker Capacity and Storage Multiplier. Double the effect of Zheng He (Great Person). Each level of Permanent Empress Wu Zetian (Great Person) provides +1 Storage Multiplier to all buildings",
    YearOfTheSnakeV2: "Lunar New Year",
    YearOfTheSnakeDesc:
-      "After completed, when entering a new age, instead of getting one great person of each unlocked age, get the same amount of great people in the current age. All buildings within 2-tile range get +1 Production Multiplier. This wonder can be upgraded and each additional upgrade provides +1 Production Multiplier to buildings within 2-tile range. This wonder can only be constructed during the lunar new year period (2.10 ~ 2.24)",
+      "After completed, when entering a new age, instead of getting one great person of each unlocked age, get the same amount of great people in the current age. All buildings within 2-tile range get +1 Production Multiplier. This wonder can be upgraded and each additional upgrade provides +1 Production Multiplier to buildings within 2-tile range. This wonder can only be constructed during the lunar new year period (1.20 ~ 2.10)",
    YellowCraneTower: "Yellow Crane Tower",
    YellowCraneTowerDesc: "+1 choice when choosing great people. All buildings within 1 tile range get +1 Production, Worker Capacity and Storage Multiplier. When constructed next to Yangtze River, the range increases to 2 tile",
    YuriGagarin: "Yuri Gagarin",
@@ -1844,58 +1844,20 @@ export const EN = {
    Russian: "Russian",
    KizhiPogost: "Kizhi Pogost",
    KizhiPogostDesc: "All buildings within 2-tile range get +X Production Multiplier. X = the production multiplier this wonder receives",
-<<<<<<< HEAD
    Maslenitsa: "Maslenitsa: Double the range of Kizhi Pogost, Savior on Spilled Blood, and Lake Baikal",
-=======
-   Maslenitsa: "Maslenitsa: Double the range of Kizhi Pogost and Lake Baikal. Double the power output of Akademik Lomonosov",
->>>>>>> upstream/main
    LakeBaikal: "Lake Baikal",
    LakeBaikalDesc: "+X Builder Capacity Multiplier. X = total levels of wonders within 2-tile range",
    Hermitage: "Hermitage",
    HermitageDesc: "This wonder can be upgraded and each level provides +1 Storage Multiplier to each type of building within 2-tile range",
-<<<<<<< HEAD
    SaviorOnSpilledBlood: "Savior on Spilled Blood",
    SaviorOnSpilledBloodDesc: "All buildings within 2-tile range get +X Production Multiplier. X is based on the time since the wonder was constructed",
-=======
->>>>>>> upstream/main
    ConstructedTime: "Constructed Time",
    ConstructedTimeHours: "Constructed Time (hours)",
    Sputnik1: "Sputnik 1",
    Sputnik1Desc: "This wonder can be upgraded and each level provides +1 level to all Cold War Age great people for this run (excl. Great People that provide level boost)",
    AkademikLomonosov: "Akademik Lomonosov",
-<<<<<<< HEAD
    AkademikLomonosovDesc: "This wonder can be upgraded and each level provides 100KW of power. Provides +X Production and Storage Multiplier to Crypto Fund. X = Information Age Wisdom Level. Provide power to all tiles within 2 tile range. This wonder can be moved",
    Kremlin: "Kremlin",
    AndreyKolmogorov: "Andrey Kolmogorov",
    Tchaikovsky: "Tchaikovsky",
-=======
-   AkademikLomonosovDesc: "This wonder can be upgraded and each level provides 100KW of power. Provides +X Production and Storage Multiplier to Cosmodrome. X = Cold War Age Wisdom Level. Provide power to all tiles within 2 tile range. This wonder can be moved",
-   Kremlin: "Kremlin",
-   AndreyKolmogorov: "Andrey Kolmogorov",
-   Tchaikovsky: "Tchaikovsky",
-   Cosmodrome: "Cosmodrome",
-   AuroraBorealis: "Aurora Borealis",
-   AuroraBorealisDesc: "All buildings that do not produce workers within 2-tile range get +X Production Multiplier. X is based on the time since the wonder was discovered",
-   Canadian: "Canadian",
-   ParliamentHill: "Parliament Hill",
-   WinterCarnival: "Winter Carnival: Double the range of Aurora Borealis. Double the Building Level Boost from Chateau Frontenac and Habitat 67",
-   LakeLouise: "Lake Louise",
-   LakeLouiseDesc: "All trade map neighbors become allies (regardless of civilization). Each ally tile provides +2 Building Level Boost",
-   ChateauFrontenac: "Chateau Frontenac",
-   ChateauFrontenacDesc: "This wonder can be upgraded. Each time it levels up, three random buildings from the current age are drawn. Select one of them to receive +1 Building Level Boost (cannot be changed once selected)",
-   DinosaurProvincialPark: "Dinosaur Provincial Park",
-   DinosaurProvincialParkDesc: "This wonder can be activated at a chosen time to gain a one-time Koti equal to 25% of the empire value at that time",
-   Habitat67: "Habitat 67",
-   Habitat67Desc: "This wonder can be upgraded and each level provides +1 Production, Worker Capacity and Storage Multiplier to AI Labs. Provides +1 Building Level Boost to AI Labs for every 5 happiness (capped)",
-   TerryFox: "Terry Fox",
-   AILab: "AI Lab",
-   GeoffreyHinton: "Geoffrey Hinton",
-   WorldTradeOrganization: "World Trade Organization",
-   WorldTradeOrganizationDesc: "This wonder can be upgraded and each level provides +1 Production Multiplier to Trade Tile Bonus buildings. Participate in WTO vote each week that increases the chance for the voted buildings to appear in the next week's Trade Tile Bonus",
-   WTOVoteCurrent: "Current WTO Vote #%{id}",
-   WTOVoteNext: "Upcoming WTO Vote #%{id}",
-   WTOVoteEndIn: "You can change your vote any time before the voting ends in <b>%{time}</b>",
-   UNVoteDescriptionHTML: "Buildings voted in UN General Assembly get <b>+5 Production Multiplier</b>",
-   WTOVoteDescriptionHTML: "Buildings voted in World Trade Organization has a <b>higher chance</b> to appear in Trade Tile Bonus",
->>>>>>> upstream/main
 };

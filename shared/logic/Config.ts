@@ -1,5 +1,5 @@
 import { BuildingDefinitions, type Building } from "../definitions/BuildingDefinitions";
-import { CityDefinitions, type City } from "../definitions/CityDefinitions";
+import { CityDefinitions } from "../definitions/CityDefinitions";
 import { GreatPersonDefinitions } from "../definitions/GreatPersonDefinitions";
 import { IdeologyDefinitions } from "../definitions/IdeologyDefinitions";
 import { MaterialDefinitions, type Material } from "../definitions/MaterialDefinitions";
@@ -12,7 +12,6 @@ import type { PartialTabulate } from "../utilities/TypeDefinitions";
 const BuildingTier: PartialTabulate<Building> = {};
 const BuildingTech: Partial<Record<Building, Tech>> = {};
 const BuildingTechAge: Partial<Record<Building, TechAge>> = {};
-const BuildingCity: Partial<Record<Building, City>> = {};
 
 const MaterialTier: PartialTabulate<Material> = {};
 const MaterialPrice: PartialTabulate<Material> = {};
@@ -35,7 +34,6 @@ export const Config = {
    BuildingTier,
    BuildingTech,
    BuildingTechAge,
-   BuildingCity,
    MaterialTier,
    MaterialTech,
    MaterialPrice,

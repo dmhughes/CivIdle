@@ -21,7 +21,6 @@ import {
    isSpecialBuilding,
    isWorldOrNaturalWonder,
    isWorldWonder,
-   saviorOnSpilledBloodProductionMultiplier,
    totalMultiplierFor,
    useWorkers,
 } from "../../../shared/logic/BuildingLogic";
@@ -77,7 +76,6 @@ import type {
    IItaipuDamBuildingData,
    ILouvreBuildingData,
    IReligionBuildingData,
-   ISaviorOnSpilledBloodBuildingData,
    ISwissBankBuildingData,
    ITileData,
    ITraditionBuildingData,
@@ -1724,17 +1722,16 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
       }
       case "CentrePompidou": {
          const pompidou = building as ICentrePompidouBuildingData;
-            const multiplier = isFestival("CentrePompidou", gs) ? 2 : 1;
-            // The Pompidou should apply its bonus per civilisation (use the tracked cities set size)
-            const effectCount = Math.max(1, pompidou.cities?.size ?? pompidou.level ?? 1);
-            Tick.next.globalMultipliers.output.push({
-               value: multiplier * effectCount,
-               source: buildingName,
-            });
-            Tick.next.globalMultipliers.storage.push({
-               value: 2 * multiplier * effectCount,
-               source: buildingName,
-            });
+         const multiplier = isFestival("CentrePompidou", gs) ? 2 : 1;
+         const cities = pompidou.cities.size + 1;
+         Tick.next.globalMultipliers.output.push({
+            value: multiplier * cities,
+            source: buildingName,
+         });
+         Tick.next.globalMultipliers.storage.push({
+            value: 2 * multiplier * cities,
+            source: buildingName,
+         });
          building.resources = {};
          break;
       }
@@ -2129,26 +2126,6 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
          });
          break;
       }
-<<<<<<< HEAD
-      case "SaviorOnSpilledBlood": {
-         const saviorOnSpilledBlood = building as ISaviorOnSpilledBloodBuildingData;
-         const constructedHours = Math.floor((gs.tick - saviorOnSpilledBlood.constructedTick) / 3600);
-         const range = isFestival(building.type, gs) ? 4 : 2;
-         const multiplier = saviorOnSpilledBloodProductionMultiplier(constructedHours);
-         for (const point of grid.getRange(tileToPoint(xy), range)) {
-            const targetXy = pointToTile(point);
-            if (targetXy === xy) {
-               continue;
-            }
-            mapSafePush(Tick.next.tileMultipliers, targetXy, {
-               output: multiplier,
-               source: buildingName,
-            });
-         }
-         break;
-      }
-=======
->>>>>>> upstream/main
       case "Sputnik1": {
          forEach(Config.GreatPerson, (p, def) => {
             if (def.age === "ColdWarAge") {
@@ -2161,14 +2138,6 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
          for (const point of grid.getRange(tileToPoint(xy), 2)) {
             Tick.next.powerGrid.add(pointToTile(point));
          }
-<<<<<<< HEAD
-         mapSafeAdd(Tick.next.workersAvailable, "Power", 100_000 * building.level);
-         const informationAgeWisdom = options.ageWisdom.InformationAge ?? 0;
-         if (informationAgeWisdom > 0) {
-            addMultiplier(
-               "CryptoFund",
-               { output: informationAgeWisdom, storage: informationAgeWisdom },
-=======
          const multiplier = isFestival(building.type, gs) ? 2 : 1;
          mapSafeAdd(Tick.next.workersAvailable, "Power", 100_000 * building.level * multiplier);
          const ageWisdomLevel = options.ageWisdom.ColdWarAge ?? 0;
@@ -2176,14 +2145,11 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
             addMultiplier(
                "Cosmodrome",
                { output: ageWisdomLevel * multiplier, storage: ageWisdomLevel * multiplier },
->>>>>>> upstream/main
                buildingName,
             );
          }
          break;
       }
-<<<<<<< HEAD
-=======
       case "AuroraBorealis": {
          const auroraBorealis = building as IAuroraBorealisBuildingData;
          const hours = Math.floor((gs.tick - auroraBorealis.startTick) / 3600);
@@ -2237,6 +2203,5 @@ export function onProductionComplete({ xy, offline }: { xy: Tile; offline: boole
          }
          break;
       }
->>>>>>> upstream/main
    }
 }

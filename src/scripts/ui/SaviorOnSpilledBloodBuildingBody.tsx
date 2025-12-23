@@ -1,10 +1,6 @@
 import { useState } from "react";
 import { saviorOnSpilledBloodProductionMultiplier } from "../../../shared/logic/BuildingLogic";
-<<<<<<< HEAD
-import type { ISaviorOnSpilledBloodBuildingData } from "../../../shared/logic/Tile";
-=======
 import type { IAuroraBorealisBuildingData } from "../../../shared/logic/Tile";
->>>>>>> 66bec29d (1.1 (#562))
 import { cls, formatHMS, range, SECOND } from "../../../shared/utilities/Helper";
 import { L, t } from "../../../shared/utilities/i18n";
 import { BuildingColorComponent } from "./BuildingColorComponent";
@@ -21,13 +17,8 @@ export function SaviorOnSpilledBloodBuildingBody({
    if (!building) {
       return null;
    }
-<<<<<<< HEAD
-   const saviorOnSpilledBlood = building as ISaviorOnSpilledBloodBuildingData;
-   const constructedHours = Math.floor((gameState.tick - saviorOnSpilledBlood.constructedTick) / 3600);
-=======
    const saviorOnSpilledBlood = building as IAuroraBorealisBuildingData;
    const constructedHours = Math.floor((gameState.tick - saviorOnSpilledBlood.startTick) / 3600);
->>>>>>> 66bec29d (1.1 (#562))
    const [hours, setHours] = useState(11);
    return (
       <div className="window-body">
@@ -35,11 +26,7 @@ export function SaviorOnSpilledBloodBuildingBody({
             <li className="row">
                <div className="f1">{t(L.ConstructedTime)}</div>
                <div className="text-strong">
-<<<<<<< HEAD
-                  {formatHMS((gameState.tick - saviorOnSpilledBlood.constructedTick) * SECOND)}
-=======
                   {formatHMS((gameState.tick - saviorOnSpilledBlood.startTick) * SECOND)}
->>>>>>> 66bec29d (1.1 (#562))
                </div>
             </li>
             <li className="row">

@@ -35,11 +35,7 @@ import { MontSaintMichelBuildingBody } from "./MontSaintMichelBuildingBody";
 import { PetraBuildingBody } from "./PetraBuildingBody";
 import { PlayerTradeBuildingBody } from "./PlayerTradeBuildingBody";
 import { ReligionBuildingBody } from "./ReligionBuildingBody";
-<<<<<<< HEAD
-import { SaviorOnSpilledBloodBuildingBody } from "./SaviorOnSpilledBloodBuildingBody";
-=======
 import { SaviorOnSpilledBloodBuildingBody as AuroraBorealisBuildingBody } from "./SaviorOnSpilledBloodBuildingBody";
->>>>>>> 66bec29d (1.1 (#562))
 import { ScienceProductionWonderBuildingBody } from "./ScienceProductionWonderBuildingBody";
 import { StatisticsBuildingBody } from "./StatisticsBuildingBody";
 import { SwissBankBuildingBody } from "./SwissBankBuildingBody";
@@ -51,8 +47,8 @@ import { TraditionBuildingBody } from "./TraditionBuildingBody";
 import { UnitedNationsBuildingBody } from "./UnitedNationsBuildingBody";
 import { UpgradableWonderBuildingBody } from "./UpgradableWonderBuildingBody";
 import { WarehouseBuildingBody } from "./WarehouseBuildingBody";
-import { ZugspitzeBuildingBody } from "./ZugspitzeBuildingBody";
 import { WorldTradeOrganizationBuildingBody } from "./WorldTradeOrganizationBuildingBody";
+import { ZugspitzeBuildingBody } from "./ZugspitzeBuildingBody";
 
 const BuildingBodyOverride: Partial<Record<Building, FunctionComponent<IBuildingComponentProps>>> = {
    Headquarter: HeadquarterBuildingBody,
@@ -106,11 +102,6 @@ const BuildingBodyOverride: Partial<Record<Building, FunctionComponent<IBuilding
    GreatOceanRoad: UpgradableWonderBuildingBody,
    KizhiPogost: KizhiPogostBuildingBody,
    Hermitage: UpgradableWonderBuildingBody,
-<<<<<<< HEAD
-   SaviorOnSpilledBlood: SaviorOnSpilledBloodBuildingBody,
-   Sputnik1: UpgradableWonderBuildingBody,
-   AkademikLomonosov: AkademikLomonosovBuildingBody,
-=======
    AuroraBorealis: AuroraBorealisBuildingBody,
    Sputnik1: UpgradableWonderBuildingBody,
    AkademikLomonosov: AkademikLomonosovBuildingBody,
@@ -118,7 +109,6 @@ const BuildingBodyOverride: Partial<Record<Building, FunctionComponent<IBuilding
    DinosaurProvincialPark: DinosaurProvincialParkBuildingBody,
    Habitat67: UpgradableWonderBuildingBody,
    WorldTradeOrganization: WorldTradeOrganizationBuildingBody,
->>>>>>> 66bec29d (1.1 (#562))
 };
 
 export function BuildingPage(props: { tile: ITileData }): React.ReactNode {

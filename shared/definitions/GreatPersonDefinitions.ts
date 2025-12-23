@@ -1509,11 +1509,7 @@ export class GreatPersonDefinitions {
       name: () => t(L.AndreyKolmogorov),
       boost: {
          multipliers: ["output", "storage"],
-<<<<<<< HEAD
-         buildings: ["ComputerLab", "CryptoFund"],
-=======
          buildings: ["SatelliteFactory", "Cosmodrome"],
->>>>>>> 66bec29d (1.1 (#562))
       },
       time: "1903 ~ 1987 AD",
       value: (level) => level,

@@ -491,11 +491,7 @@ export class WorldScene extends Scene {
                this.highlightRange(grid, isFestival(building.type, gs) ? 4 : 2);
                break;
             }
-<<<<<<< HEAD
-            case "SaviorOnSpilledBlood": {
-=======
             case "AuroraBorealis": {
->>>>>>> 66bec29d (1.1 (#562))
                this.highlightRange(grid, isFestival(building.type, gs) ? 4 : 2);
                break;
             }

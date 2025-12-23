@@ -1390,10 +1390,7 @@ const WonderToGreatPerson: Partial<Record<Building, GreatPerson>> = {
    CologneCathedral: "Beethoven",
    SydneyHarbourBridge: "JohnBradfield",
    Hermitage: "Tchaikovsky",
-<<<<<<< HEAD
-=======
    Habitat67: "GeoffreyHinton",
->>>>>>> upstream/main
 };
 
 export function getWonderExtraLevel(building: Building): number {
@@ -1439,8 +1436,6 @@ export function getResourceImportBuildingBaseStorageMultiplier(gs: GameState): n
 export function saviorOnSpilledBloodProductionMultiplier(hour: number): number {
    return Math.floor(19 * (1 - Math.E ** ((Math.log(0.5) / 48) * hour))) + 1;
 }
-<<<<<<< HEAD
-=======
 
 export function isEligibleForTradeTileBonus(b: Building): boolean {
    if (b === "SwissBank") {
@@ -1460,4 +1455,3 @@ export function isEligibleForTradeTileBonus(b: Building): boolean {
 
    return Config.TechAge[age].idx >= Config.TechAge.ClassicalAge.idx;
 }
->>>>>>> upstream/main

@@ -35,11 +35,7 @@ import { MontSaintMichelBuildingBody } from "./MontSaintMichelBuildingBody";
 import { PetraBuildingBody } from "./PetraBuildingBody";
 import { PlayerTradeBuildingBody } from "./PlayerTradeBuildingBody";
 import { ReligionBuildingBody } from "./ReligionBuildingBody";
-<<<<<<< HEAD
-import { SaviorOnSpilledBloodBuildingBody } from "./SaviorOnSpilledBloodBuildingBody";
-=======
 import { SaviorOnSpilledBloodBuildingBody as AuroraBorealisBuildingBody } from "./SaviorOnSpilledBloodBuildingBody";
->>>>>>> upstream/main
 import { ScienceProductionWonderBuildingBody } from "./ScienceProductionWonderBuildingBody";
 import { StatisticsBuildingBody } from "./StatisticsBuildingBody";
 import { SwissBankBuildingBody } from "./SwissBankBuildingBody";
@@ -106,11 +102,6 @@ const BuildingBodyOverride: Partial<Record<Building, FunctionComponent<IBuilding
    GreatOceanRoad: UpgradableWonderBuildingBody,
    KizhiPogost: KizhiPogostBuildingBody,
    Hermitage: UpgradableWonderBuildingBody,
-<<<<<<< HEAD
-   SaviorOnSpilledBlood: SaviorOnSpilledBloodBuildingBody,
-   Sputnik1: UpgradableWonderBuildingBody,
-   AkademikLomonosov: AkademikLomonosovBuildingBody,
-=======
    AuroraBorealis: AuroraBorealisBuildingBody,
    Sputnik1: UpgradableWonderBuildingBody,
    AkademikLomonosov: AkademikLomonosovBuildingBody,
@@ -118,7 +109,6 @@ const BuildingBodyOverride: Partial<Record<Building, FunctionComponent<IBuilding
    DinosaurProvincialPark: DinosaurProvincialParkBuildingBody,
    Habitat67: UpgradableWonderBuildingBody,
    WorldTradeOrganization: WorldTradeOrganizationBuildingBody,
->>>>>>> upstream/main
 };
 
 export function BuildingPage(props: { tile: ITileData }): React.ReactNode {

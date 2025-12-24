@@ -42,6 +42,7 @@ import { ShortcutPage } from "./ShortcutPage";
 import { ThemePage } from "./ThemePage";
 
 type MenuItemOptions = "view" | "options" | "help" | "scripts" | null;
+type MenuItemOptionsExtended = MenuItemOptions | "templates";
 
 function MenuButton({ name }: { name: string }): React.ReactNode {
    return (
@@ -86,7 +87,7 @@ export function MenuComponent(): React.ReactNode {
       const unsub = watchGameOptions((opts) => setGameOptions(opts));
       return () => unsub();
    }, []);
-   const [active, setActive] = useState<MenuItemOptions>(null);
+   const [active, setActive] = useState<MenuItemOptionsExtended>(null);
    const buttonRef = useRef(null);
    const user = useUser();
    const platformInfo = usePlatformInfo();
@@ -441,6 +442,7 @@ export function MenuComponent(): React.ReactNode {
                   >
                      <MenuItem check={((gameOptions.daveScriptsRun?.BuildInitialMines ?? -1) === (gameOptions.rebirthInfo?.length ?? 0))}>{"001 - Build Initial Mines"}</MenuItem>
                   </div>
+ 
                   <div
                      className="menu-popover-item"
                      onPointerDown={async () => {
@@ -1139,6 +1141,86 @@ export function MenuComponent(): React.ReactNode {
 
                   </div>
                </div>
+            <div
+               ref={buttonRef}
+               className={classNames({
+                  "menu-button": true,
+                  active: active === "templates",
+               })}
+               onPointerDown={(e) => {
+                  e.nativeEvent.stopPropagation();
+                  active === "templates" ? setActive(null) : setActive("templates");
+               }}
+               onPointerOver={(e) => {
+                  if (active !== null && active !== "templates") {
+                     setActive("templates");
+                  }
+               }}
+            >
+               <MenuButton name={"Building Templates"} />
+               <div
+                  className={classNames({
+                     "menu-popover": true,
+                     active: active === "templates",
+                  })}
+               >
+                  {/* Load templates via Vite glob (eager) so we can show meta names */}
+                  {(() => {
+                     try {
+                        // import all JSON templates eagerly
+                        const modules = import.meta.glob('../buildingTemplates/*.json', { eager: true, as: 'json' }) as Record<string, unknown>;
+                        const entries = Object.entries(modules).map(([p, m]) => {
+                           const mrec = m as Record<string, unknown> | undefined;
+                           const defaultMeta = (mrec && (mrec.default as Record<string, unknown> | undefined))?.meta;
+                           const metaObj = (mrec?.meta ?? defaultMeta) ?? { name: p };
+                           const name = (metaObj && (metaObj as Record<string, unknown>).name) ? String((metaObj as Record<string, unknown>).name) : p;
+                           return { path: p, meta: { name } };
+                        });
+                        if (entries.length === 0) {
+                           return (
+                              <div className="menu-popover-item">
+                                 <MenuItem check={false}>{"No templates found"}</MenuItem>
+                              </div>
+                           );
+                        }
+                        return entries.map((e) => (
+                           <div
+                              key={e.path}
+                              className="menu-popover-item"
+                              onPointerDown={async () => {
+                                 playClick();
+                                 setActive(null);
+                                 try {
+                                    // module already imported eagerly; extract the plan object
+                                    const mod = (modules as Record<string, unknown>)[e.path] as Record<string, unknown> | undefined;
+                                    const planObj = mod?.default ? (mod.default as unknown) : (mod as unknown);
+                                    const bt = await import("../logic/BuildTemplate");
+                                    if (bt && typeof bt.PerformBuildingPlanFromObject === 'function') {
+                                       const res = await bt.PerformBuildingPlanFromObject(planObj, { intervalMs: 0 });
+                                       const summary = res.results.map((r: { type: string; requested: number; placed: number }) => `${r.type} ${r.placed}/${r.requested}`).join(", ");
+                                       showToast(`${e.meta.name}: ${summary}`);
+                                    } else {
+                                       showToast('BuildTemplate runner not available');
+                                    }
+                                 } catch (err) {
+                                    playError();
+                                    showToast(String(err));
+                                 }
+                              }}
+                           >
+                              <MenuItem check={false}>{e.meta.name}</MenuItem>
+                           </div>
+                        ));
+                     } catch (err) {
+                        return (
+                           <div className="menu-popover-item">
+                              <MenuItem check={false}>{"Error loading templates"}</MenuItem>
+                           </div>
+                        );
+                     }
+                  })()}
+               </div>
+            </div>
             {isHalloween(now) ? (
                <img
                   src={SpiderWeb}

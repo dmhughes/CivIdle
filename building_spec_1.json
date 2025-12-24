@@ -1,0 +1,34 @@
+{
+"meta": { "name": "Simple Industry Plan", "author": "PlayerA", "version": "1.0" },
+"tasks": [
+{
+"mode": "strip",
+"specs": [
+{ "name": "Coal Mine", "count": 6, "level": 12 },
+{ "name": "Iron Mine", "count": 6, "level": 12 }
+],
+"options": {
+"side": "left",
+"width": 6,
+"startRow": 10,
+"intervalMs": 100,
+"targetLevelDefault": 12,
+"ensureCoalForPower": true
+}
+},
+{
+"mode": "rect",
+"specs": [
+{ "name": "Steel Factory", "count": 4, "level": 15 },
+{ "name": "Coal Power Plant", "count": 1, "level": 10 }
+],
+"options": {
+"minX": 20,
+"maxX": 23,
+"minY": 5,
+"maxY": 8,
+"intervalMs": 200
+}
+}
+]
+}

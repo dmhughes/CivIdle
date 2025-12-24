@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "name": "Apartment Support Buildings",
+    "author": "Dave",
+    "version": "1.0"
+  },
+  "tasks": [
+    {
+      "mode": "strip",
+      "specs": [
+        { "name": "Brickworks", "count": 5, "level": 10 },
+        { "name": "Lumber Mill", "count": 5, "level": 10 }
+      ],
+      "options": { "side": "right", "width": 10, "startRow": 0, "intervalMs": 100 }
+    },
+    {
+      "mode": "strip",
+      "specs": [
+        { "name": "Poultry Farm", "count": 15, "level": 10 },
+        { "name": "Flour Mill", "count": 2, "level": 10 },
+        { "name": "Dairy Farm", "count": 2, "level": 10 },
+        { "name": "Bakery", "count": 15, "level": 10 },
+        { "name": "Cheese Factory", "count": 12, "level": 10 }
+      ],
+      "options": { "side": "right", "width": 10, "startRow": 2, "intervalMs": 100 }
+    }
+  ]
+}

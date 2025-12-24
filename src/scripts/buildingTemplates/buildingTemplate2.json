@@ -1,0 +1,32 @@
+{
+  "meta": {
+    "name": "Test Plan: Quick Build",
+    "author": "PlayerA",
+    "version": "1.0"
+  },
+  "tasks": [
+    {
+      "mode": "strip",
+      "specs": [
+        { "name": "House", "count": 4, "level": 5 },
+        { "name": "Apartment", "count": 2, "level": 8 },
+        { "name": "Condo", "count": 1, "level": 12 }
+      ],
+      "options": { "side": "right", "width": 8, "startRow": 5, "intervalMs": 50 }
+    },
+    {
+      "mode": "rect",
+      "specs": [
+        { "name": "Steel Mill", "count": 3, "level": 10 },
+        { "name": "Aluminum Smelter", "count": 1, "level": 8 },
+        { "name": "Coal Power Plant", "count": 1, "level": 10 }
+      ],
+      "options": { "minX": 12, "maxX": 16, "minY": 12, "maxY": 14, "intervalMs": 150 }
+    },
+    {
+      "mode": "clear",
+      "specs": [],
+      "options": { "minX": 5, "maxX": 9, "minY": 2, "maxY": 4 }
+    }
+  ]
+}

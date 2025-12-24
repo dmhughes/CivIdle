@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "name": "Simple Industry Plan",
+    "author": "PlayerA",
+    "version": "1.0"
+  },
+  "tasks": [
+    {
+      "mode": "strip",
+      "specs": [
+        { "name": "Coal Mine", "count": 6, "level": 12 },
+        { "name": "Iron Mining Camp", "count": 6, "level": 12 },
+        { "name": "Copper Mining Camp", "count": 4, "level": 12 },
+        { "name": "Gold Mining Camp", "count": 2, "level": 12 }
+      ],
+  "options": { "side": "left", "width": 6, "startRow": 10, "intervalMs": 100 }
+    },
+    {
+      "mode": "rect",
+      "specs": [
+        { "name": "Steel Mill", "count": 4, "level": 15 },
+        { "name": "Aluminum Smelter", "count": 2, "level": 12 },
+        { "name": "Coal Power Plant", "count": 1, "level": 10 },
+        { "name": "Oil Refinery", "count": 1, "level": 10 }
+      ],
+      "options": { "minX": 20, "maxX": 23, "minY": 5, "maxY": 8, "intervalMs": 200 }
+    }
+    ,
+    {
+      "mode": "clear",
+      "specs": [],
+      "options": { "minX": 10, "maxX": 15, "minY": 3, "maxY": 6 }
+    }
+  ]
+}

@@ -335,7 +335,16 @@ export function MenuComponent(): React.ReactNode {
                   >
                      <MenuItem check={false}>{t(L.EmailDeveloper)}</MenuItem>
                   </div>
-                  {isSteam() ? (
+                  <div
+                     className="menu-popover-item"
+                     onPointerDown={() => {
+                        playClick();
+                        openUrl(SUPPORTER_PACK_URL);
+                     }}
+                  >
+                     <MenuItem check={false}>{t(L.SupporterPack)}</MenuItem>
+                  </div>
+                  {isSteam() && (
                      <div
                         className="menu-popover-item"
                         onPointerDown={() => {
@@ -349,7 +358,7 @@ export function MenuComponent(): React.ReactNode {
                      >
                         <MenuItem check={false}>{t(L.SaveAndExit)}</MenuItem>
                      </div>
-                  ) : null}
+                  )}
                   {isSteam() &&
                   user &&
                   !isNullOrUndefined(platformInfo?.connectedUserId) &&
@@ -370,15 +379,6 @@ export function MenuComponent(): React.ReactNode {
                         <MenuItem check={false}>{t(L.CheckInAndExit)}</MenuItem>
                      </div>
                   ) : null}
-                  <div
-                     className="menu-popover-item"
-                     onPointerDown={() => {
-                        playClick();
-                        openUrl(SUPPORTER_PACK_URL);
-                     }}
-                  >
-                     <MenuItem check={false}>{t(L.SupporterPack)}</MenuItem>
-                  </div>
                   <div
                      className="menu-popover-item"
                      onPointerDown={() => {

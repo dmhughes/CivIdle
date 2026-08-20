@@ -1,7 +1,7 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { decode, encode } from "@msgpack/msgpack";
-import type { ServerImpl } from "../../../server/src/Server";
 import type { Building } from "../../../shared/definitions/BuildingDefinitions";
+import type { Material } from "../../../shared/definitions/MaterialDefinitions";
 import WorldMap from "../../../shared/definitions/WorldMap.json";
 import { addPetraOfflineTime } from "../../../shared/logic/BuildingLogic";
 import { Config } from "../../../shared/logic/Config";
@@ -18,6 +18,7 @@ import type {
    IClientMapEntry,
    IClientTrade,
    IMapMessage,
+   IPendingClaim,
    IPendingClaimMessage,
    IPlatformInfo,
    IRPCMessage,
@@ -58,6 +59,19 @@ import { idbGet, idbSet } from "../utilities/BrowserStorage";
 import { makeObservableHook } from "../utilities/Hook";
 import { playBubble, playKaching } from "../visuals/Sound";
 import { SteamClient, isSteam } from "./SteamClient";
+
+type ServerImpl = Record<string, (...args: any[]) => Promise<any>> & {
+   queryRelatedPlayers: (...args: any[]) => Promise<IUser[]>;
+   listSpecialPlayers: (...args: any[]) => Promise<IUser[]>;
+   getGreatPeopleLevelRank: (...args: any[]) => Promise<IUser[]>;
+   getEmpireValueRank: (...args: any[]) => Promise<IUser[]>;
+   getMutedPlayers: (...args: any[]) => Promise<Array<{ handle: string; time: number }>>;
+   getSlowedPlayer: (...args: any[]) => Promise<Array<{ handle: string; time: number; interval: number }>>;
+   getPendingClaims: (...args: any[]) => Promise<IPendingClaim[]>;
+   claimTradesV2: (
+      ...args: any[]
+   ) => Promise<{ resources: Partial<Record<Material, number>> }>;
+};
 
 let user: IUser | null = null;
 let platformInfo: IPlatformInfo | null = null;

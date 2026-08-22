@@ -3,10 +3,10 @@ import type { City } from "../../../shared/definitions/CityDefinitions";
 import type { Material } from "../../../shared/definitions/MaterialDefinitions";
 import {
    addPetraOfflineTime,
+   applyBuildingDefaults,
    BASE_WARP_HOUR,
    findSpecialBuilding,
-   getPompidou,
-   getRandomEmptyTile,
+   getBottomRightEmptyTile,
    hasNotUsedDinosaurProvincialPark,
 } from "../../../shared/logic/BuildingLogic";
 import { Config } from "../../../shared/logic/Config";
@@ -22,8 +22,10 @@ import {
 } from "../../../shared/logic/RebirthLogic";
 import { getAllTechUnlockCost, getCurrentAge } from "../../../shared/logic/TechLogic";
 import { Tick } from "../../../shared/logic/TickLogic";
+import type { ICentrePompidouBuildingData } from "../../../shared/logic/Tile";
+import { makeBuilding } from "../../../shared/logic/Tile";
 import { UserAttributes } from "../../../shared/utilities/Database";
-import { clamp, hasFlag, reduceOf, rejectIn, setFlag, uuid4 } from "../../../shared/utilities/Helper";
+import { clamp, hasFlag, keysOf, reduceOf, rejectIn, setFlag, uuid4 } from "../../../shared/utilities/Helper";
 import { $t, L } from "../../../shared/utilities/i18n";
 import { resetToCity, saveGame } from "../Global";
 import { checkRebirthAchievements } from "../logic/Achievement";
@@ -189,6 +191,24 @@ export function RebirthConfirm({
                         flags |= RebirthFlags.EasterBunny;
                      }
 
+                     const existingPompidou = findSpecialBuilding("CentrePompidou", gs)?.building as
+                        | ICentrePompidouBuildingData
+                        | undefined;
+                     const pompidou =
+                        existingPompidou ??
+                        (applyBuildingDefaults(
+                           makeBuilding({ type: "CentrePompidou" }),
+                           options,
+                        ) as ICentrePompidouBuildingData);
+                     if (!existingPompidou) {
+                        pompidou.level = 1;
+                        pompidou.desiredLevel = 1;
+                        pompidou.status = "completed";
+                     }
+                     for (const city of keysOf(Config.City)) {
+                        pompidou.cities.add(city);
+                     }
+
                      getGameOptions().rebirthInfo.push({
                         greatPeopleAtRebirth: greatPeopleAtRebirthCount,
                         greatPeopleThisRun: reduceOf(gs.greatPeople, (prev, k, v) => prev + v, 0),
@@ -205,16 +225,17 @@ export function RebirthConfirm({
                      playClick();
                      await resetToCity(gameId, nextCity, extraTileForNextRebirth);
 
-                     const pompidou = getPompidou(gs);
-                     if (currentCity !== nextCity && pompidou) {
-                        const result = getRandomEmptyTile(1, new Set(), getGameState());
-                        if (result) {
-                           const [xy, tile] = result;
-                           tile.explored = true;
-                           tile.building = pompidou;
-                           pompidou.cities.add(currentCity);
-                        }
+                     const nextGameState = getGameState();
+                     for (const tile of nextGameState.tiles.values()) {
+                        tile.explored = true;
                      }
+
+                     const result = getBottomRightEmptyTile(nextGameState);
+                     if (!result) {
+                        throw new Error("No empty bottom-right map tile exists in the new game.");
+                     }
+                     const [, tile] = result;
+                     tile.building = pompidou;
 
                      if (carryOverWarp > 0) {
                         addPetraOfflineTime(carryOverWarp, getGameState());

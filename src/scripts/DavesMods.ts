@@ -27,7 +27,7 @@ import {
    OnBuildingOrUpgradeComplete,
    OnTechUnlocked,
 } from "../../shared/logic/Update";
-import { isEmpty, resolveIn, tileToPoint } from "../../shared/utilities/Helper";
+import { isEmpty, pointToTile, resolveIn, tileToPoint } from "../../shared/utilities/Helper";
 import { WorldScene } from "./scenes/WorldScene";
 import { Singleton } from "./utilities/Singleton";
 
@@ -37,10 +37,12 @@ const STRIP_BUILDING_LEVEL = 15;
 const HOUSE_COUNT = 20;
 const WHEAT_FARM_COUNT = 2;
 const APARTMENT_COUNT = 1000;
+const CONDO_COUNT = 900;
 const STRIP_WIDTH = 15;
 const LEFT_STRIP_WIDTH = 30;
 const CONDO_BUILDING_LEVEL = 12;
 const CONDO_TIER_ONE_BUILDING_COUNT = 8;
+const OXFORD_ATOMIUM_BUILDING_LEVEL = 12;
 const RESEARCH_CHECK_INTERVAL_SECONDS = 10;
 const DEPOSIT_MINE_COUNT = 8;
 
@@ -84,10 +86,61 @@ const CONDO_PRODUCTION_BUILDING_REQUESTS: ReadonlyArray<{ type: Building; count:
    { type: "Pizzeria", count: 50 },
 ];
 
+const OXFORD_ATOMIUM_DEPOSIT_BUILDING_REQUESTS: ReadonlyArray<{
+   deposit: Deposit;
+   type: Building;
+}> = [
+   { deposit: "Water", type: "Aqueduct" },
+   { deposit: "Aluminum", type: "AluminumSmelter" },
+   { deposit: "Coal", type: "CoalMine" },
+   { deposit: "Copper", type: "CopperMiningCamp" },
+   { deposit: "Iron", type: "IronMiningCamp" },
+   { deposit: "Wood", type: "LoggingCamp" },
+   { deposit: "Stone", type: "StoneQuarry" },
+   { deposit: "Uranium", type: "UraniumMine" },
+];
+
+const OXFORD_ATOMIUM_NON_ELECTRIFIED_BUILDING_REQUESTS: ReadonlyArray<{
+   type: Building;
+   count: number;
+}> = [
+   { type: "Sandpit", count: 1 },
+   { type: "WheatFarm", count: 1 },
+   { type: "Brewery", count: 1 },
+   { type: "Brickworks", count: 1 },
+   { type: "GunpowderMill", count: 1 },
+   { type: "IronForge", count: 1 },
+   { type: "LumberMill", count: 1 },
+   { type: "PaperMaker", count: 1 },
+   { type: "Stable", count: 1 },
+   { type: "SteelMill", count: 1 },
+   { type: "ConcretePlant", count: 1 },
+   { type: "DynamiteWorkshop", count: 1 },
+   { type: "RebarPlant", count: 1 },
+   { type: "RifleFactory", count: 1 },
+   { type: "Shrine", count: 1 },
+   { type: "WritersGuild", count: 1 },
+   { type: "GatlingGunFactory", count: 1 },
+   { type: "ReinforcedConcretePlant", count: 1 },
+   { type: "University", count: 1 },
+   { type: "ArtilleryFactory", count: 1 },
+];
+
+const OXFORD_ATOMIUM_ELECTRIFIED_BUILDING_REQUESTS: ReadonlyArray<{
+   type: Building;
+   count: number;
+}> = [
+   { type: "CoalPowerPlant", count: 1 },
+   { type: "UraniumEnrichmentPlant", count: 1 },
+   { type: "AtomicFacility", count: 1 },
+];
+
 let initialMinesRun: Promise<void> | undefined;
 let buildApartmentsRun: Promise<void> | undefined;
 let buildCondosRun: Promise<void> | undefined;
 let buildCondosRunState: GameState | undefined;
+let buildOxfordUniAndAtomiumRun: Promise<void> | undefined;
+let buildOxfordUniAndAtomiumRunState: GameState | undefined;
 const removedBuildings = new Set<IBuildingData>();
 
 function findDefaultBuilding(buildingType: Building): IBuildingData | undefined {
@@ -186,6 +239,16 @@ function repeatBuilding(buildingType: Building, count: number): Building[] {
    return Array.from({ length: count }, () => buildingType);
 }
 
+function hasResourceProducer(gameState: GameState, resource: Deposit): boolean {
+   for (const tile of gameState.tiles.values()) {
+      const building = tile.building;
+      if (building && Config.Building[building.type].output[resource]) {
+         return true;
+      }
+   }
+   return false;
+}
+
 function getResearchPath(tech: Tech, path: Tech[] = [], visited = new Set<Tech>()): Tech[] {
    if (visited.has(tech)) {
       return path;
@@ -234,7 +297,7 @@ async function researchWhenAffordable(tech: Tech): Promise<void> {
          notifyGameStateUpdate(gameState);
          return;
       }
-      await resolveIn(1, null);
+      await resolveIn(RESEARCH_CHECK_INTERVAL_SECONDS, null);
    }
 }
 
@@ -297,6 +360,44 @@ function getEmptyTilesInRightStrip(gameState: GameState): ITileData[] {
          const secondPoint = tileToPoint(secondTile.tile);
          return firstPoint.y - secondPoint.y || firstPoint.x - secondPoint.x;
       });
+}
+
+function getEmptyContiguousTilesInRightStrip(gameState: GameState, count: number): ITileData[] {
+   const candidates = getEmptyTilesInRightStrip(gameState);
+   const candidateByTile = new Map(candidates.map((tile) => [tile.tile, tile]));
+   const rejectedTiles = new Set<ITileData["tile"]>();
+   const grid = getGrid(gameState);
+
+   for (const startTile of candidates) {
+      if (rejectedTiles.has(startTile.tile)) {
+         continue;
+      }
+
+      const component: ITileData[] = [];
+      const visitedTiles = new Set<ITileData["tile"]>([startTile.tile]);
+      const queue = [startTile];
+      for (let index = 0; index < queue.length; index++) {
+         const tile = queue[index];
+         component.push(tile);
+         if (component.length >= count) {
+            return component;
+         }
+
+         for (const point of grid.getNeighbors(tileToPoint(tile.tile))) {
+            const neighbor = candidateByTile.get(pointToTile(point));
+            if (neighbor && !visitedTiles.has(neighbor.tile)) {
+               visitedTiles.add(neighbor.tile);
+               queue.push(neighbor);
+            }
+         }
+      }
+
+      component.forEach((tile) => rejectedTiles.add(tile.tile));
+   }
+
+   throw new Error(
+      `Not enough contiguous empty cells exist in the right ${STRIP_WIDTH}-tile strip for the requested block.`,
+   );
 }
 
 function getEmptyTilesInLeftStrip(gameState: GameState): ITileData[] {
@@ -458,15 +559,94 @@ function buildCondoProductionBuildings(): IBuildingData[] {
    return buildings;
 }
 
+async function researchBuildingRequests(requests: ReadonlyArray<{ type: Building }>): Promise<void> {
+   for (const request of requests) {
+      await researchWhenAffordable(getBuildingUnlockTech(request.type));
+   }
+}
+
+async function buildOxfordAtomiumDepositBuildings(): Promise<IBuildingData[]> {
+   const initialGameState = getGameState();
+   const requestsToBuild = OXFORD_ATOMIUM_DEPOSIT_BUILDING_REQUESTS.filter(
+      (request) => !hasResourceProducer(initialGameState, request.deposit),
+   );
+   if (requestsToBuild.length === 0) {
+      return [];
+   }
+
+   await researchBuildingRequests(requestsToBuild);
+
+   const gameState = getGameState();
+   const missingRequests = requestsToBuild.filter((request) => !hasResourceProducer(gameState, request.deposit));
+   if (missingRequests.length === 0) {
+      return [];
+   }
+
+   const bottomRightTile = getBottomRightEmptyTile(gameState);
+   if (!bottomRightTile) {
+      throw new Error("No empty bottom-right map tile exists in the current game.");
+   }
+
+   const depositBuildingTypes: Building[] = [];
+   const depositTiles: ITileData[] = [];
+   const reservedTiles = new Set<ITileData["tile"]>();
+   for (const request of missingRequests) {
+      const tiles = sortByDistance(
+         (tile) => Boolean(tile.deposit[request.deposit]) && !tile.building && !reservedTiles.has(tile.tile),
+         bottomRightTile[0],
+         gameState,
+      ).slice(0, DEPOSIT_MINE_COUNT);
+      if (tiles.length < DEPOSIT_MINE_COUNT) {
+         throw new Error(`Not enough ${request.deposit} deposits are available for Oxford and Atomium.`);
+      }
+      depositBuildingTypes.push(...repeatBuilding(request.type, DEPOSIT_MINE_COUNT));
+      depositTiles.push(...tiles);
+      tiles.forEach((tile) => reservedTiles.add(tile.tile));
+   }
+
+   return placeBuildings(depositBuildingTypes, depositTiles, OXFORD_ATOMIUM_BUILDING_LEVEL, true);
+}
+
+async function buildOxfordAtomiumNonElectrifiedBuildings(): Promise<IBuildingData[]> {
+   await researchBuildingRequests(OXFORD_ATOMIUM_NON_ELECTRIFIED_BUILDING_REQUESTS);
+
+   const buildingTypes = OXFORD_ATOMIUM_NON_ELECTRIFIED_BUILDING_REQUESTS.flatMap((request) =>
+      repeatBuilding(request.type, request.count),
+   );
+   const tiles = getEmptyContiguousTilesInRightStrip(getGameState(), buildingTypes.length);
+   return placeBuildings(buildingTypes, tiles, OXFORD_ATOMIUM_BUILDING_LEVEL);
+}
+
+async function buildOxfordAtomiumElectrifiedBuildings(): Promise<IBuildingData[]> {
+   await researchBuildingRequests(OXFORD_ATOMIUM_ELECTRIFIED_BUILDING_REQUESTS);
+
+   const buildingTypes = OXFORD_ATOMIUM_ELECTRIFIED_BUILDING_REQUESTS.flatMap((request) =>
+      repeatBuilding(request.type, request.count),
+   );
+   const tiles = getEmptyContiguousTilesInRightStrip(getGameState(), buildingTypes.length);
+   return placeBuildings(buildingTypes, tiles, OXFORD_ATOMIUM_BUILDING_LEVEL);
+}
+
+async function executeBuildOxfordUniAndAtomium(): Promise<void> {
+   const buildings = [
+      ...(await buildOxfordAtomiumDepositBuildings()),
+      ...(await buildOxfordAtomiumNonElectrifiedBuildings()),
+      ...(await buildOxfordAtomiumElectrifiedBuildings()),
+   ];
+   await Promise.all(buildings.map((building) => waitForBuildingCompletion(building)));
+   await researchWhenAffordable("SpaceProgram");
+   await researchWhenAffordable("MutualAssuredDestruction");
+}
+
 async function buildCondos(): Promise<void> {
    const condoTiles = getEmptyTilesInLeftStrip(getGameState());
-   if (condoTiles.length < APARTMENT_COUNT) {
+   if (condoTiles.length < CONDO_COUNT) {
       throw new Error(`Not enough empty cells exist in the left ${LEFT_STRIP_WIDTH}-tile strip for Condos.`);
    }
 
    const condos = placeBuildings(
-      repeatBuilding("Condo", APARTMENT_COUNT),
-      condoTiles.slice(0, APARTMENT_COUNT),
+      repeatBuilding("Condo", CONDO_COUNT),
+      condoTiles.slice(0, CONDO_COUNT),
       CONDO_BUILDING_LEVEL,
    );
    await Promise.all(condos.map((building) => waitForBuildingCompletion(building)));
@@ -554,6 +734,24 @@ export function runBuildApartments(): Promise<void> {
    return buildApartmentsRun;
 }
 
+export function runBuildOxfordUniAndAtomium(): Promise<void> {
+   const gameState = getGameState();
+   if (buildOxfordUniAndAtomiumRunState !== gameState) {
+      buildOxfordUniAndAtomiumRunState = gameState;
+      buildOxfordUniAndAtomiumRun = undefined;
+   }
+
+   if (!buildOxfordUniAndAtomiumRun) {
+      buildOxfordUniAndAtomiumRun = executeBuildOxfordUniAndAtomium().catch((error: unknown) => {
+         if (buildOxfordUniAndAtomiumRunState === gameState) {
+            buildOxfordUniAndAtomiumRun = undefined;
+         }
+         throw error;
+      });
+   }
+   return buildOxfordUniAndAtomiumRun;
+}
+
 export function runBuildCondos(): Promise<void> {
    const gameState = getGameState();
    if (buildCondosRunState !== gameState) {
@@ -569,6 +767,9 @@ export function runBuildCondos(): Promise<void> {
          throw error;
       });
    }
+   void runBuildOxfordUniAndAtomium().catch((error: unknown) => {
+      console.error("Automatic Oxford Uni and Atomium failed.", error);
+   });
    return buildCondosRun;
 }
 

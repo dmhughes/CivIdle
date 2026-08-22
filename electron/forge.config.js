@@ -7,6 +7,7 @@ module.exports = {
          /src\/*/,
          /local\/*/,
          /save\/*/,
+         /(^|[\\/])out([\\/]|$)/,
          /\.ts/,
          /steam_appid\.txt/,
          /\.git(ignore|modules)/,

@@ -6,10 +6,9 @@ import {
    addPetraOfflineTime,
    BASE_WARP_HOUR,
    findSpecialBuilding,
+   getBottomRightEmptyTile,
    getBuildingDescription,
    getMultipliersDescription,
-   getPompidou,
-   getRandomEmptyTile,
    hasNotUsedDinosaurProvincialPark,
 } from "../../../shared/logic/BuildingLogic";
 import { Config } from "../../../shared/logic/Config";
@@ -26,6 +25,7 @@ import {
 } from "../../../shared/logic/RebirthLogic";
 import { getAgeForTech, getAllTechUnlockCost, getCurrentAge } from "../../../shared/logic/TechLogic";
 import { Tick } from "../../../shared/logic/TickLogic";
+import { makeBuilding, type ICentrePompidouBuildingData } from "../../../shared/logic/Tile";
 import { UserAttributes } from "../../../shared/utilities/Database";
 import {
    clamp,
@@ -33,6 +33,7 @@ import {
    formatPercent,
    hasFlag,
    isEmpty,
+   keysOf,
    mapOf,
    range,
    reduceOf,
@@ -480,6 +481,7 @@ export function RebirthModal(): React.ReactNode {
                         Number.POSITIVE_INFINITY,
                      );
                      const currentCity = gs.city;
+                     const pompidouCities = new Set(keysOf(Config.City));
 
                      if (!gs.rebirthed) {
                         rollPermanentGreatPeople(
@@ -537,15 +539,20 @@ export function RebirthModal(): React.ReactNode {
                      playClick();
                      await resetToCity(gameId, nextCity, extraTileForNextRebirth);
 
-                     const pompidou = getPompidou(gs);
-                     if (currentCity !== nextCity && pompidou) {
-                        const result = getRandomEmptyTile(1, new Set(), getGameState());
-                        if (result) {
-                           const [xy, tile] = result;
-                           tile.explored = true;
-                           tile.building = pompidou;
-                           pompidou.cities.add(currentCity);
-                        }
+                     const rebirthState = getGameState();
+                     rebirthState.tiles.forEach((tile) => {
+                        tile.explored = true;
+                     });
+
+                     const result = getBottomRightEmptyTile(rebirthState);
+                     if (result) {
+                        const pompidou = makeBuilding({
+                           type: "CentrePompidou",
+                           level: 1,
+                           status: "completed",
+                        }) as ICentrePompidouBuildingData;
+                        pompidou.cities = pompidouCities;
+                        result[1].building = pompidou;
                      }
 
                      if (carryOverWarp > 0) {

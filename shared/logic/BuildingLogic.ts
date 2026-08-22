@@ -1308,6 +1308,27 @@ export function getRandomEmptyTile(
    return null;
 }
 
+export function getBottomRightEmptyTile(gameState: GameState): [Tile, ITileData] | null {
+   let result: [Tile, ITileData] | null = null;
+   let resultPoint = { x: -1, y: -1 };
+
+   for (const [xy, tile] of gameState.tiles) {
+      if (tile.building || !isEmpty(tile.deposit)) {
+         continue;
+      }
+
+      const point = tileToPoint(xy);
+      if (point.y < resultPoint.y || (point.y === resultPoint.y && point.x <= resultPoint.x)) {
+         continue;
+      }
+
+      result = [xy, tile];
+      resultPoint = point;
+   }
+
+   return result;
+}
+
 export function getBuildingCity(building: Building): City | null {
    let result: City | null = null;
    forEach(Config.City, (city, def) => {

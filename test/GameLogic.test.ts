@@ -2,6 +2,7 @@ import { assert, test } from "vitest";
 import type { TechAge } from "../shared/definitions/TechDefinitions";
 import {
    getBuildingCost,
+   getBottomRightEmptyTile,
    getPowerRequired,
    getStorageFor,
    getTotalBuildingCost,
@@ -82,6 +83,34 @@ test("TileBitPacking", () => {
    const tile = pointToTile({ x: 13, y: 14 });
    assert.equal(13, (tile >> 16) & 0xffff);
    assert.equal(14, tile & 0xffff);
+});
+
+test("getBottomRightEmptyTile", () => {
+   const gameState = new GameState();
+   const bottomRight = pointToTile({ x: 4, y: 4 });
+   const deposited = pointToTile({ x: 3, y: 4 });
+   const expected = pointToTile({ x: 4, y: 3 });
+
+   gameState.tiles.set(bottomRight, {
+      tile: bottomRight,
+      explored: false,
+      deposit: {},
+      building: makeBuilding({ type: "Hut", level: 1, status: "completed" }),
+   });
+   gameState.tiles.set(deposited, {
+      tile: deposited,
+      explored: false,
+      deposit: { Stone: true },
+   });
+   gameState.tiles.set(expected, {
+      tile: expected,
+      explored: false,
+      deposit: {},
+   });
+
+   const result = getBottomRightEmptyTile(gameState);
+
+   assert.equal(result?.[0], expected);
 });
 
 test("fibonacci", () => {

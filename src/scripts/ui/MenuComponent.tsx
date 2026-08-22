@@ -17,6 +17,7 @@ import Xmas5 from "../../images/Xmas5.png";
 import Xmas6 from "../../images/Xmas6.png";
 import Xmas7 from "../../images/Xmas7.png";
 import Xmas8 from "../../images/Xmas8.png";
+import { runInitialMines } from "../DavesMods";
 import { compressSave, saveGame, useFloatingMode } from "../Global";
 import { client, usePlatformInfo, useUser } from "../rpc/RPCClient";
 import { SteamClient, isSteam } from "../rpc/SteamClient";
@@ -39,7 +40,7 @@ import { RebirthModal } from "./RebirthModal";
 import { ShortcutPage } from "./ShortcutPage";
 import { ThemePage } from "./ThemePage";
 
-type MenuItemOptions = "view" | "options" | "help" | null;
+type MenuItemOptions = "view" | "options" | "davesMods" | "help" | null;
 
 function MenuButton({ name }: { name: string }): React.ReactNode {
    return (
@@ -377,6 +378,43 @@ export function MenuComponent(): React.ReactNode {
                      }}
                   >
                      <MenuItem check={false}>{$t(L.About)}</MenuItem>
+                  </div>
+               </div>
+            </div>
+            <div
+               ref={buttonRef}
+               className={classNames({
+                  "menu-button": true,
+                  active: active === "davesMods",
+               })}
+               onPointerDown={(e) => {
+                  e.nativeEvent.stopPropagation();
+                  active === "davesMods" ? setActive(null) : setActive("davesMods");
+               }}
+               onPointerOver={(e) => {
+                  if (active !== null && active !== "davesMods") {
+                     setActive("davesMods");
+                  }
+               }}
+            >
+               <MenuButton name="Dave's Mods" />
+               <div
+                  className={classNames({
+                     "menu-popover": true,
+                     active: active === "davesMods",
+                  })}
+               >
+                  <div
+                     className="menu-popover-item"
+                     onPointerDown={() => {
+                        void runInitialMines().catch((error: unknown) => {
+                           playError();
+                           showToast(String(error));
+                        });
+                        setActive(null);
+                     }}
+                  >
+                     <MenuItem check={false}>Initial Mines</MenuItem>
                   </div>
                </div>
             </div>

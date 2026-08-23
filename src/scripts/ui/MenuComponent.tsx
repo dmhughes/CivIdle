@@ -17,7 +17,7 @@ import Xmas5 from "../../images/Xmas5.png";
 import Xmas6 from "../../images/Xmas6.png";
 import Xmas7 from "../../images/Xmas7.png";
 import Xmas8 from "../../images/Xmas8.png";
-import { runBuildApartments, runBuildCondos, runBuildOxfordUniAndAtomium, runInitialMines } from "../DavesMods";
+import { runAutomateBuild } from "../DavesMods";
 import { compressSave, saveGame, useFloatingMode } from "../Global";
 import { client, usePlatformInfo, useUser } from "../rpc/RPCClient";
 import { SteamClient, isSteam } from "../rpc/SteamClient";
@@ -407,50 +407,14 @@ export function MenuComponent(): React.ReactNode {
                   <div
                      className="menu-popover-item"
                      onPointerDown={() => {
-                        void runInitialMines().catch((error: unknown) => {
+                        void runAutomateBuild().catch((error: unknown) => {
                            playError();
                            showToast(String(error));
                         });
                         setActive(null);
                      }}
                   >
-                     <MenuItem check={false}>Initial Mines</MenuItem>
-                  </div>
-                  <div
-                     className="menu-popover-item"
-                     onPointerDown={() => {
-                        void runBuildApartments().catch((error: unknown) => {
-                           playError();
-                           showToast(String(error));
-                        });
-                        setActive(null);
-                     }}
-                  >
-                     <MenuItem check={false}>Build Apartments</MenuItem>
-                  </div>
-                  <div
-                     className="menu-popover-item"
-                     onPointerDown={() => {
-                        void runBuildCondos().catch((error: unknown) => {
-                           playError();
-                           showToast(String(error));
-                        });
-                        setActive(null);
-                     }}
-                  >
-                     <MenuItem check={false}>Build Condos</MenuItem>
-                  </div>
-                  <div
-                     className="menu-popover-item"
-                     onPointerDown={() => {
-                        void runBuildOxfordUniAndAtomium().catch((error: unknown) => {
-                           playError();
-                           showToast(String(error));
-                        });
-                        setActive(null);
-                     }}
-                  >
-                     <MenuItem check={false}>Oxford Uni and Atomium</MenuItem>
+                     <MenuItem check={false}>Automate Build</MenuItem>
                   </div>
                </div>
             </div>

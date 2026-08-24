@@ -2,15 +2,20 @@ import type { Building } from "../../shared/definitions/BuildingDefinitions";
 import type { Deposit } from "../../shared/definitions/MaterialDefinitions";
 import type { Tech } from "../../shared/definitions/TechDefinitions";
 import {
-    applyBuildingDefaults,
-    findSpecialBuilding,
-    getBottomRightEmptyTile,
+   applyBuildingDefaults,
+   findSpecialBuilding,
+   getBottomRightEmptyTile,
 } from "../../shared/logic/BuildingLogic";
 import { getGameOptions, getGameState, notifyGameStateUpdate } from "../../shared/logic/GameStateLogic";
 import { clearIntraTickCache, getGrid } from "../../shared/logic/IntraTickCache";
 import { getTotalTechUnlockCost, tryDeductScience, unlockTech } from "../../shared/logic/TechLogic";
 import { sortByDistance } from "../../shared/logic/TerrainLogic";
-import { makeBuilding, type IBuildingData } from "../../shared/logic/Tile";
+import {
+   makeBuilding,
+   type IBuildingData,
+   type IIdeologyBuildingData,
+   type IReligionBuildingData,
+} from "../../shared/logic/Tile";
 import { clearTransportSourceCache, OnBuildingOrUpgradeComplete } from "../../shared/logic/Update";
 import { isEmpty, tileToPoint, type Tile } from "../../shared/utilities/Helper";
 
@@ -92,6 +97,8 @@ const PHASE_TEN_TIER_ONE_BUILDINGS: ReadonlySet<Building> = new Set([
 ]);
 const PHASE_ELEVEN_BUILDING_LEVEL = 1;
 const PHASE_ELEVEN_BUILDING_TYPES: ReadonlyArray<Building> = ["BigBen", "LuxorTemple", "HagiaSophia"];
+const PHASE_TWELVE_BUILDING_LEVEL = 5;
+const PHASE_THIRTEEN_BUILDING_LEVEL = 5;
 let automateBuildRun: Promise<void> | undefined;
 
 /**
@@ -547,9 +554,44 @@ async function executePhaseEleven(): Promise<void> {
    );
 }
 
+async function executeWonderTrack(building: IBuildingData, targetLevel: number): Promise<void> {
+   for (let level = building.level + 1; level <= targetLevel; level++) {
+      requestAutomatedBuildLevel(building, level);
+      await waitForAutomatedBuildCompletion(building, level);
+   }
+}
+
+async function executePhaseTwelve(): Promise<void> {
+   const gameState = getGameState();
+   const bigBen = findInitialBuilding("BigBen") as IIdeologyBuildingData;
+   if (bigBen.ideology && bigBen.ideology !== "Liberalism") {
+      throw new Error("Big Ben already has a different ideology selected for Phase 12.");
+   }
+
+   bigBen.ideology = "Liberalism";
+   clearIntraTickCache();
+   clearTransportSourceCache();
+   notifyGameStateUpdate(gameState);
+   await executeWonderTrack(bigBen, PHASE_TWELVE_BUILDING_LEVEL);
+}
+
+async function executePhaseThirteen(): Promise<void> {
+   const gameState = getGameState();
+   const luxorTemple = findInitialBuilding("LuxorTemple") as IReligionBuildingData;
+   if (luxorTemple.religion && luxorTemple.religion !== "Buddhism") {
+      throw new Error("Luxor Temple already has a different religion selected for Phase 13.");
+   }
+
+   luxorTemple.religion = "Buddhism";
+   clearIntraTickCache();
+   clearTransportSourceCache();
+   notifyGameStateUpdate(gameState);
+   await executeWonderTrack(luxorTemple, PHASE_THIRTEEN_BUILDING_LEVEL);
+}
+
 /**
- * Executes the eleven automation phases, with Phase 7 running alongside Phase 6, Phase 9 running alongside
- * Phase 8, and Phase 10 and Phase 11 starting after Phases 9 and 10 complete respectively.
+ * Executes the thirteen automation phases, with Phase 7 running alongside Phase 6, Phase 9 running alongside
+ * Phase 8, and Phase 10 through Phase 13 starting after their preceding phases complete.
  *
  * Phase 1 requests the initial Stone Quarry to level 12 and waits for completion. Phase 2 then requests
  * the initial Logging Camp to level 12 and waits for completion. Phase 3 finally requests the initial
@@ -569,8 +611,10 @@ async function executePhaseEleven(): Promise<void> {
  * for each remaining production-chain entry in the rightmost 15 columns from the first available cell
  * scanning rows left to right. Phase 11 starts only after every Phase 10 building reaches its target level,
  * places Big Ben, Luxor Temple, and Hagia Sophia as close to the bottom right as possible, and waits for all
- * three to finish construction. The returned Promise rejects if a required building, deposit, or empty tile
- * is missing or an operation throws.
+ * three to finish construction. Phase 12 selects Liberalism for Big Ben and advances its track one level at a
+ * time through level 5, and Phase 13 does the same for Luxor Temple's Buddhism track. Both phases start as
+ * soon as Phase 11 completes without waiting for Phase 8. The returned Promise rejects if a required building,
+ * deposit, or empty tile is missing or an operation throws.
  */
 async function executeAutomatedBuild(): Promise<void> {
    // Phase 1: Upgrade the initial Stone Quarry to level 12.
@@ -626,7 +670,13 @@ async function executeAutomatedBuild(): Promise<void> {
 
    // Phase 11: Build the three wonders near the bottom-right corner.
    const phaseElevenCompletion = executePhaseEleven();
-   await Promise.all([phaseEightCompletion, phaseElevenCompletion]);
+
+   // Phase 12: Research Big Ben's Liberalism track one level at a time after Phase 11.
+   const phaseTwelveCompletion = phaseElevenCompletion.then(() => executePhaseTwelve());
+
+   // Phase 13: Research Luxor Temple's Buddhism track one level at a time after Phase 11.
+   const phaseThirteenCompletion = phaseElevenCompletion.then(() => executePhaseThirteen());
+   await Promise.all([phaseEightCompletion, phaseTwelveCompletion, phaseThirteenCompletion]);
 }
 
 /**
@@ -634,7 +684,7 @@ async function executeAutomatedBuild(): Promise<void> {
  *
  * The first caller starts `executeAutomatedBuild`; callers who click while it is active receive the same
  * Promise instead of starting duplicate phases. The shared handle is cleared when the run resolves or
- * rejects, so a later click can start another run. The returned Promise represents completion of all eleven
+ * rejects, so a later click can start another run. The returned Promise represents completion of all thirteen
  * phases.
  */
 export function runAutomateBuild(): Promise<void> {

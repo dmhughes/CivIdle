@@ -127,7 +127,6 @@ export async function startGame(
       textures,
    });
    setCityOverride(gameState);
-
    // ========== Connect to server ==========
    routeTo(LoadingPage, { stage: LoadingPageStage.SteamSignIn });
    const TIMEOUT = import.meta.env.DEV ? 10 : 30;
